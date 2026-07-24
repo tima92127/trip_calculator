@@ -1,0 +1,1051 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Калькулятор расходов в поездке</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg: #f8f9fa;
+            --card: #ffffff;
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --danger: #dc2626;
+            --danger-hover: #b91c1c;
+            --text: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            --success: #059669;
+            --warning: #d97706;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .card {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 10px 12px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .participants-check {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .participant-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--bg);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .participant-check:hover {
+            background: #e5e7eb;
+        }
+
+        .participant-check input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--primary);
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: var(--primary-hover);
+        }
+
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: var(--danger-hover);
+        }
+
+        .btn-secondary {
+            background: var(--bg);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e5e7eb;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 0.8rem;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+        }
+
+        th {
+            background: var(--bg);
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        td {
+            font-size: 0.9rem;
+        }
+
+        tr:hover td {
+            background: #f9fafb;
+        }
+
+        .amount {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        .balance-positive {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .balance-negative {
+            color: var(--danger);
+            font-weight: 600;
+        }
+
+        .balance-zero {
+            color: var(--text-secondary);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            margin: 0 -24px;
+            padding: 0 24px;
+        }
+
+        .actions-cell {
+            display: flex;
+            gap: 4px;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: var(--text-secondary);
+        }
+
+        .empty-state-icon {
+            font-size: 2.5rem;
+            margin-bottom: 12px;
+            opacity: 0.5;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .summary-item {
+            text-align: center;
+            padding: 16px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .summary-item-name {
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .summary-item-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85rem;
+            margin-bottom: 4px;
+        }
+
+        .summary-item-row span:first-child {
+            color: var(--text-secondary);
+        }
+
+        .tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 20px;
+            background: var(--bg);
+            padding: 4px;
+            border-radius: 10px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 16px;
+            border: none;
+            background: transparent;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: var(--text-secondary);
+        }
+
+        .tab.active {
+            background: var(--card);
+            color: var(--text);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .tab:hover:not(.active) {
+            color: var(--text);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .split-options {
+            display: flex;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .split-option {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: var(--card);
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+        }
+
+        .split-option.active {
+            border-color: var(--primary);
+            background: rgba(37, 99, 235, 0.05);
+        }
+
+        .split-option:hover:not(.active) {
+            border-color: #d1d5db;
+        }
+
+        .manual-splits {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+        }
+
+        .manual-split-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .manual-split-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .manual-split-row label {
+            min-width: 80px;
+            font-size: 0.9rem;
+        }
+
+        .manual-split-row input {
+            width: 100px;
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .total-check {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        .total-check.valid {
+            color: var(--success);
+        }
+
+        .total-check.invalid {
+            color: var(--danger);
+        }
+
+        .delete-confirm {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .delete-confirm-content {
+            background: var(--card);
+            padding: 24px;
+            border-radius: 12px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+
+        .delete-confirm-content h3 {
+            margin-bottom: 12px;
+        }
+
+        .delete-confirm-content p {
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+        }
+
+        .delete-confirm-actions {
+            display: flex;
+            gap: 8px;
+            justify-content: center;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 8px;
+            margin-bottom: 16px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+        }
+
+        .status-bar.connected {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-bar.disconnected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-bar.loading {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 12px;
+            }
+
+            .card {
+                padding: 16px;
+            }
+
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+
+            th, td {
+                padding: 8px 6px;
+                font-size: 0.8rem;
+            }
+
+            .actions-cell {
+                flex-direction: column;
+            }
+
+            .btn-sm {
+                padding: 4px 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Калькулятор расходов</h1>
+            <p class="subtitle">Распределяйте расходы поездки между участниками</p>
+        </header>
+
+        <div id="status-bar" class="status-bar loading">
+            <div class="spinner"></div>
+            <span>Подключение к серверу...</span>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="showTab('expenses')">Расходы</button>
+            <button class="tab" onclick="showTab('summary')">Итоги</button>
+        </div>
+
+        <div id="expenses-tab">
+            <div class="card">
+                <div class="card-title">Добавить расход</div>
+                <form id="expense-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="date">Дата</label>
+                            <input type="date" id="date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="description">Описание</label>
+                            <input type="text" id="description" placeholder="Например: Жильё" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="category">Категория</label>
+                            <select id="category">
+                                <option value="Жильё">Жильё</option>
+                                <option value="Транспорт">Транспорт</option>
+                                <option value="Еда">Еда</option>
+                                <option value="Развлечения">Развлечения</option>
+                                <option value="Прочее">Прочее</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="payer">Кто платил</label>
+                            <select id="payer">
+                                <option value="Тимур">Тимур</option>
+                                <option value="Наташа">Наташа</option>
+                                <option value="Андрей">Андрей</option>
+                                <option value="Рома">Рома</option>
+                                <option value="Санёк">Санёк</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="amount">Сумма (₽)</label>
+                            <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <label style="font-size: 0.85rem; font-weight: 500; color: #6b7280;">Участники</label>
+                        <div class="participants-check">
+                            <label class="participant-check">
+                                <input type="checkbox" name="participant" value="Тимур" checked>
+                                <span>Тимур</span>
+                            </label>
+                            <label class="participant-check">
+                                <input type="checkbox" name="participant" value="Наташа" checked>
+                                <span>Наташа</span>
+                            </label>
+                            <label class="participant-check">
+                                <input type="checkbox" name="participant" value="Андрей" checked>
+                                <span>Андрей</span>
+                            </label>
+                            <label class="participant-check">
+                                <input type="checkbox" name="participant" value="Рома" checked>
+                                <span>Рома</span>
+                            </label>
+                            <label class="participant-check">
+                                <input type="checkbox" name="participant" value="Санёк" checked>
+                                <span>Санёк</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 16px;">
+                        <label style="font-size: 0.85rem; font-weight: 500; color: #6b7280;">Способ деления</label>
+                        <div class="split-options">
+                            <div class="split-option active" onclick="setSplitMode('equal')">Поровну</div>
+                            <div class="split-option" onclick="setSplitMode('manual')">Вручную</div>
+                        </div>
+                        <div id="manual-splits" class="manual-splits hidden"></div>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="submit-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            Добавить
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetForm()">Сбросить</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span>Список расходов</span>
+                    <span id="expense-count" style="font-size: 0.85rem; color: #6b7280; font-weight: 400;"></span>
+                </div>
+                <div class="table-wrapper">
+                    <table id="expenses-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Описание</th>
+                                <th>Категория</th>
+                                <th>Платил</th>
+                                <th>Сумма</th>
+                                <th>Деление</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="expenses-body"></tbody>
+                    </table>
+                </div>
+                <div id="empty-state" class="empty-state">
+                    <div class="empty-state-icon">📋</div>
+                    <p>Пока нет расходов. Добавьте первый!</p>
+                </div>
+            </div>
+        </div>
+
+        <div id="summary-tab" class="hidden">
+            <div class="card">
+                <div class="card-title">Баланс участников</div>
+                <div class="summary-grid" id="summary-grid"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Кто кому должен</div>
+                <div id="debts-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="delete-confirm" class="delete-confirm hidden">
+        <div class="delete-confirm-content">
+            <h3>Удалить расход?</h3>
+            <p>Это действие нельзя отменить.</p>
+            <div class="delete-confirm-actions">
+                <button class="btn btn-secondary" onclick="cancelDelete()">Отмена</button>
+                <button class="btn btn-danger" onclick="confirmDelete()">Удалить</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+        // ============================================
+        // НАСТРОЙКИ - ВСТАВЬТЕ ВАШИ ДАННЫЕ ИЗ SUPABASE
+        // ============================================
+        const SUPABASE_URL = 'https://cjcknsigtpogldxztska.supabase.co';      // Например: https://xxxxx.supabase.co
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqY2tuc2lndHBvZ2xkeHp0c2thIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5MjIyMDgsImV4cCI6MjEwMDQ5ODIwOH0.xSVc9DqcR-PAyRN7yvohO7NkI7V3vFkNm4QE-68kD7I';  // Ключ из настроек API
+        // ============================================
+
+        const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        const PARTICIPANTS = ['Тимур', 'Наташа', 'Андрей', 'Рома', 'Санёк'];
+        let expenses = [];
+        let splitMode = 'equal';
+        let deleteId = null;
+
+        function setStatus(type, message) {
+            const bar = document.getElementById('status-bar');
+            bar.className = `status-bar ${type}`;
+            if (type === 'loading') {
+                bar.innerHTML = `<div class="spinner"></div><span>${message}</span>`;
+            } else {
+                bar.innerHTML = `<span>${message}</span>`;
+            }
+        }
+
+        async function init() {
+            document.getElementById('date').valueAsDate = new Date();
+
+            try {
+                const { data, error } = await supabase
+                    .from('expenses')
+                    .select('*')
+                    .order('date', { ascending: false });
+
+                if (error) throw error;
+
+                expenses = data || [];
+                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
+                renderExpenses();
+            } catch (err) {
+                console.error('Supabase error:', err);
+                setStatus('disconnected', 'Ошибка подключения. Проверьте настройки.');
+            }
+        }
+
+        function setSplitMode(mode) {
+            splitMode = mode;
+            document.querySelectorAll('.split-option').forEach((el, i) => {
+                el.classList.toggle('active', (i === 0 && mode === 'equal') || (i === 1 && mode === 'manual'));
+            });
+            document.getElementById('manual-splits').classList.toggle('hidden', mode === 'equal');
+            if (mode === 'manual') {
+                renderManualSplits();
+            }
+        }
+
+        function renderManualSplits() {
+            const container = document.getElementById('manual-splits');
+            const checked = getCheckedParticipants();
+            container.innerHTML = checked.map(p => `
+                <div class="manual-split-row">
+                    <label>${p}</label>
+                    <input type="number" step="0.01" min="0" value="0" data-participant="${p}" class="manual-split-input">
+                    <span style="color: #6b7280;">₽</span>
+                </div>
+            `).join('') + `
+                <div id="split-total" class="total-check">Сумма: 0 ₽</div>
+            `;
+            updateSplitTotal();
+        }
+
+        function updateSplitTotal() {
+            const inputs = document.querySelectorAll('.manual-split-input');
+            const total = Array.from(inputs).reduce((sum, el) => sum + (parseFloat(el.value) || 0), 0);
+            const amount = parseFloat(document.getElementById('amount').value) || 0;
+            const totalEl = document.getElementById('split-total');
+            if (totalEl) {
+                totalEl.textContent = `Сумма: ${total.toFixed(2)} ₽ / ${amount.toFixed(2)} ₽`;
+                totalEl.className = 'total-check ' + (Math.abs(total - amount) < 0.01 ? 'valid' : 'invalid');
+            }
+        }
+
+        document.getElementById('amount').addEventListener('input', () => {
+            if (splitMode === 'manual') updateSplitTotal();
+        });
+
+        function getCheckedParticipants() {
+            return Array.from(document.querySelectorAll('input[name="participant"]:checked'))
+                .map(el => el.value);
+        }
+
+        document.querySelectorAll('input[name="participant"]').forEach(cb => {
+            cb.addEventListener('change', () => {
+                if (splitMode === 'manual') renderManualSplits();
+            });
+        });
+
+        document.getElementById('expense-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submit-btn');
+            btn.disabled = true;
+
+            const participants = getCheckedParticipants();
+            const amount = parseFloat(document.getElementById('amount').value);
+
+            if (participants.length === 0) {
+                alert('Выберите хотя бы одного участника');
+                btn.disabled = false;
+                return;
+            }
+
+            let splits = {};
+            if (splitMode === 'equal') {
+                const share = amount / participants.length;
+                participants.forEach(p => splits[p] = share);
+            } else {
+                document.querySelectorAll('.manual-split-input').forEach(el => {
+                    const val = parseFloat(el.value) || 0;
+                    if (val > 0) splits[el.dataset.participant] = val;
+                });
+                const total = Object.values(splits).reduce((a, b) => a + b, 0);
+                if (Math.abs(total - amount) > 0.01) {
+                    alert(`Сумма долей (${total.toFixed(2)}) не совпадает с суммой расхода (${amount.toFixed(2)})`);
+                    btn.disabled = false;
+                    return;
+                }
+            }
+
+            const expense = {
+                date: document.getElementById('date').value,
+                description: document.getElementById('description').value,
+                category: document.getElementById('category').value,
+                payer: document.getElementById('payer').value,
+                amount: amount,
+                split_mode: splitMode,
+                participants: participants,
+                splits: splits
+            };
+
+            try {
+                const { data, error } = await supabase
+                    .from('expenses')
+                    .insert([expense])
+                    .select()
+                    .single();
+
+                if (error) throw error;
+
+                expenses.unshift(data);
+                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
+                renderExpenses();
+                resetForm();
+            } catch (err) {
+                console.error('Insert error:', err);
+                alert('Ошибка сохранения. Попробуйте ещё раз.');
+            }
+
+            btn.disabled = false;
+        });
+
+        function resetForm() {
+            document.getElementById('description').value = '';
+            document.getElementById('amount').value = '';
+            document.getElementById('date').valueAsDate = new Date();
+            setSplitMode('equal');
+        }
+
+        function renderExpenses() {
+            const tbody = document.getElementById('expenses-body');
+            const emptyState = document.getElementById('empty-state');
+            const countEl = document.getElementById('expense-count');
+
+            if (expenses.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                countEl.textContent = '';
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            countEl.textContent = `(${expenses.length})`;
+
+            tbody.innerHTML = expenses.map(exp => `
+                <tr>
+                    <td>${formatDate(exp.date)}</td>
+                    <td>${exp.description}</td>
+                    <td>${exp.category}</td>
+                    <td>${exp.payer}</td>
+                    <td class="amount">${formatCurrency(exp.amount)}</td>
+                    <td>${exp.split_mode === 'equal' ? 'Поровну' : 'Вручную'}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn btn-secondary btn-sm" onclick="editExpense('${exp.id}')">Изм.</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteExpense('${exp.id}')">Уд.</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        window.editExpense = async function(id) {
+            const exp = expenses.find(e => e.id === id);
+            if (!exp) return;
+
+            document.getElementById('date').value = exp.date;
+            document.getElementById('description').value = exp.description;
+            document.getElementById('category').value = exp.category;
+            document.getElementById('payer').value = exp.payer;
+            document.getElementById('amount').value = exp.amount;
+
+            document.querySelectorAll('input[name="participant"]').forEach(cb => {
+                cb.checked = exp.participants.includes(cb.value);
+            });
+
+            setSplitMode(exp.split_mode);
+            if (exp.split_mode === 'manual') {
+                setTimeout(() => {
+                    document.querySelectorAll('.manual-split-input').forEach(el => {
+                        if (exp.splits[el.dataset.participant]) {
+                            el.value = exp.splits[el.dataset.participant];
+                        }
+                    });
+                    updateSplitTotal();
+                }, 10);
+            }
+
+            try {
+                await supabase.from('expenses').delete().eq('id', id);
+                expenses = expenses.filter(e => e.id !== id);
+                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
+                renderExpenses();
+            } catch (err) {
+                console.error('Delete error:', err);
+            }
+
+            document.getElementById('expense-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.deleteExpense = function(id) {
+            deleteId = id;
+            document.getElementById('delete-confirm').classList.remove('hidden');
+        };
+
+        window.confirmDelete = async function() {
+            try {
+                await supabase.from('expenses').delete().eq('id', deleteId);
+                expenses = expenses.filter(e => e.id !== deleteId);
+                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
+                renderExpenses();
+            } catch (err) {
+                console.error('Delete error:', err);
+            }
+            cancelDelete();
+        };
+
+        window.cancelDelete = function() {
+            deleteId = null;
+            document.getElementById('delete-confirm').classList.add('hidden');
+        };
+
+        window.showTab = function(tab) {
+            document.querySelectorAll('.tab').forEach((el, i) => {
+                el.classList.toggle('active', (i === 0 && tab === 'expenses') || (i === 1 && tab === 'summary'));
+            });
+            document.getElementById('expenses-tab').classList.toggle('hidden', tab !== 'expenses');
+            document.getElementById('summary-tab').classList.toggle('hidden', tab !== 'summary');
+            if (tab === 'summary') updateSummary();
+        };
+
+        function updateSummary() {
+            const summary = {};
+            PARTICIPANTS.forEach(p => {
+                summary[p] = { paid: 0, spent: 0 };
+            });
+
+            expenses.forEach(exp => {
+                if (summary[exp.payer]) {
+                    summary[exp.payer].paid += exp.amount;
+                }
+                Object.entries(exp.splits).forEach(([p, amount]) => {
+                    if (summary[p]) {
+                        summary[p].spent += amount;
+                    }
+                });
+            });
+
+            const grid = document.getElementById('summary-grid');
+            grid.innerHTML = PARTICIPANTS.map(p => {
+                const s = summary[p];
+                const balance = s.paid - s.spent;
+                const balanceClass = balance > 0.01 ? 'balance-positive' : balance < -0.01 ? 'balance-negative' : 'balance-zero';
+                return `
+                    <div class="summary-item">
+                        <div class="summary-item-name">${p}</div>
+                        <div class="summary-item-row">
+                            <span>Оплатил:</span>
+                            <span class="amount">${formatCurrency(s.paid)}</span>
+                        </div>
+                        <div class="summary-item-row">
+                            <span>Потратил:</span>
+                            <span class="amount">${formatCurrency(s.spent)}</span>
+                        </div>
+                        <div class="summary-item-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                            <span>Баланс:</span>
+                            <span class="${balanceClass}">${balance >= 0 ? '+' : ''}${formatCurrency(balance)}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            calculateDebts(summary);
+        }
+
+        function calculateDebts(summary) {
+            const debtors = [];
+            const creditors = [];
+
+            PARTICIPANTS.forEach(p => {
+                const balance = summary[p].paid - summary[p].spent;
+                if (balance < -0.01) {
+                    debtors.push({ name: p, amount: -balance });
+                } else if (balance > 0.01) {
+                    creditors.push({ name: p, amount: balance });
+                }
+            });
+
+            debtors.sort((a, b) => b.amount - a.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            const debts = [];
+            let i = 0, j = 0;
+
+            while (i < debtors.length && j < creditors.length) {
+                const amount = Math.min(debtors[i].amount, creditors[j].amount);
+                if (amount > 0.01) {
+                    debts.push({
+                        from: debtors[i].name,
+                        to: creditors[j].name,
+                        amount: amount
+                    });
+                }
+                debtors[i].amount -= amount;
+                creditors[j].amount -= amount;
+                if (debtors[i].amount < 0.01) i++;
+                if (creditors[j].amount < 0.01) j++;
+            }
+
+            const container = document.getElementById('debts-list');
+            if (debts.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>Все рассчитались! 🎉</p></div>';
+            } else {
+                container.innerHTML = debts.map(d => `
+                    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">${d.from}</span>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                        </svg>
+                        <span style="font-weight: 600;">${d.to}</span>
+                        <span style="margin-left: auto; font-weight: 600; color: #2563eb;">${formatCurrency(d.amount)}</span>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function formatDate(dateStr) {
+            const d = new Date(dateStr);
+            return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        }
+
+        function formatCurrency(amount) {
+            return new Intl.NumberFormat('ru-RU', {
+                style: 'currency',
+                currency: 'RUB',
+                minimumFractionDigits: 0,
+                maximumFractionDigits: 2
+            }).format(amount);
+        }
+
+        init();
+    </script>
+</body>
+</html>
