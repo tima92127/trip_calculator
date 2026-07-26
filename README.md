@@ -20,12 +20,14 @@
 
 ### 3. Настройте приложение
 
-Откройте `index.html` и замените заглушки:
+Скопируйте `config.example.js` в `config.js` и впишите свои данные:
 
 ```javascript
-const SUPABASE_URL = 'https://ваш-проект.supabase.co';
-const SUPABASE_ANON_KEY = 'ваш-ключ-здесь';
+window.SUPABASE_URL = 'https://ваш-проект.supabase.co';
+window.SUPABASE_ANON_KEY = 'ваш-ключ-здесь';
 ```
+
+`config.js` в `.gitignore`, поэтому ключи не попадают в репозиторий.
 
 ### 4. Запустите локально
 
@@ -41,10 +43,14 @@ npx serve .
 
 ## Деплой на GitHub Pages
 
-1. Создайте репозиторий на GitHub
-2. Загрузите файлы `index.html` и `README.md`
-3. В настройках репозитория включите **GitHub Pages** (main branch)
-4. Приложение будет доступно по адресу `https://ваш-юзернейм.github.io/репозиторий/`
+Деплой автоматический, через GitHub Actions (`.github/workflows/deploy.yml`) —
+он сам генерирует `config.js` из секретов репозитория при каждом пуше в `main`.
+
+1. В настройках репозитория: **Settings → Secrets and variables → Actions**
+   → добавьте секреты `SUPABASE_URL` и `SUPABASE_ANON_KEY`.
+2. **Settings → Pages** → Source: **GitHub Actions**.
+3. Запушьте изменения в `main` — workflow соберёт и опубликует сайт.
+4. Приложение будет доступно по адресу `https://ваш-юзернейм.github.io/репозиторий/`.
 
 ## Возможности
 

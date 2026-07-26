@@ -924,15 +924,16 @@
         </div>
     </div>
 
+    <script src="config.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         import Chart from 'https://esm.sh/chart.js@4/auto';
 
         // ============================================
-        // НАСТРОЙКИ - ВСТАВЬТЕ ВАШИ ДАННЫЕ ИЗ SUPABASE
+        // НАСТРОЙКИ - берутся из config.js (см. config.example.js)
         // ============================================
-        const SUPABASE_URL = 'https://cjcknsigtpogldxztska.supabase.co';      // Например: https://xxxxx.supabase.co
-        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNqY2tuc2lndHBvZ2xkeHp0c2thIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ5MjIyMDgsImV4cCI6MjEwMDQ5ODIwOH0.xSVc9DqcR-PAyRN7yvohO7NkI7V3vFkNm4QE-68kD7I';  // Ключ из настроек API
+        const SUPABASE_URL = window.SUPABASE_URL;
+        const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
         // ============================================
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
