@@ -1,0 +1,19 @@
+{
+  "name": "Калькулятор расходов в поездке",
+  "short_name": "Расходы",
+  "description": "Распределение расходов поездки между участниками",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f8f9fa",
+  "theme_color": "#2563eb",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

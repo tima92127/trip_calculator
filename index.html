@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#2563eb">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
     <title>Калькулятор расходов в поездке</title>
     <style>
         * {
@@ -181,6 +184,15 @@
             background: #e5e7eb;
         }
 
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #047857;
+        }
+
         .btn-sm {
             padding: 6px 12px;
             font-size: 0.8rem;
@@ -190,6 +202,7 @@
             display: flex;
             gap: 8px;
             margin-top: 16px;
+            flex-wrap: wrap;
         }
 
         table {
@@ -210,6 +223,15 @@
             color: var(--text-secondary);
             text-transform: uppercase;
             letter-spacing: 0.5px;
+        }
+
+        th.sortable {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        th.sortable:hover {
+            color: var(--text);
         }
 
         td {
@@ -298,10 +320,12 @@
             background: var(--bg);
             padding: 4px;
             border-radius: 10px;
+            flex-wrap: wrap;
         }
 
         .tab {
             flex: 1;
+            min-width: 90px;
             padding: 10px 16px;
             border: none;
             background: transparent;
@@ -463,6 +487,11 @@
             color: #1e40af;
         }
 
+        .status-bar.offline {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
         .spinner {
             width: 16px;
             height: 16px;
@@ -474,6 +503,106 @@
 
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+
+        .chart-container {
+            position: relative;
+            height: 280px;
+        }
+
+        .person-select {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+
+        .person-select button {
+            padding: 8px 16px;
+            border: 2px solid var(--border);
+            border-radius: 8px;
+            background: var(--card);
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .person-select button.active {
+            border-color: var(--primary);
+            background: rgba(37, 99, 235, 0.05);
+            color: var(--primary);
+        }
+
+        .matrix-table th,
+        .matrix-table td {
+            text-align: center;
+        }
+
+        .matrix-table td.diagonal {
+            background: var(--bg);
+            color: var(--text-secondary);
+        }
+
+        .matrix-table td.amount-cell {
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 12px;
+        }
+
+        .debt-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            flex-wrap: wrap;
+        }
+
+        .settlement-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.9rem;
+            flex-wrap: wrap;
+        }
+
+        .settlement-row:last-child {
+            border-bottom: none;
+        }
+
+        .people-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+
+        .people-row input {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            min-width: 120px;
+        }
+
+        .hint {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 12px;
         }
 
         @media (max-width: 640px) {
@@ -523,11 +652,14 @@
         <div class="tabs">
             <button class="tab active" onclick="showTab('expenses')">Расходы</button>
             <button class="tab" onclick="showTab('summary')">Итоги</button>
+            <button class="tab" onclick="showTab('dashboard')">Дашборд</button>
+            <button class="tab" onclick="showTab('personal')">Личное</button>
+            <button class="tab" onclick="showTab('people')">Люди</button>
         </div>
 
         <div id="expenses-tab">
             <div class="card">
-                <div class="card-title">Добавить расход</div>
+                <div class="card-title" id="expense-form-title">Добавить расход</div>
                 <form id="expense-form">
                     <div class="form-grid">
                         <div class="form-group">
@@ -540,23 +672,11 @@
                         </div>
                         <div class="form-group">
                             <label for="category">Категория</label>
-                            <select id="category">
-                                <option value="Жильё">Жильё</option>
-                                <option value="Транспорт">Транспорт</option>
-                                <option value="Еда">Еда</option>
-                                <option value="Развлечения">Развлечения</option>
-                                <option value="Прочее">Прочее</option>
-                            </select>
+                            <select id="category"></select>
                         </div>
                         <div class="form-group">
                             <label for="payer">Кто платил</label>
-                            <select id="payer">
-                                <option value="Тимур">Тимур</option>
-                                <option value="Наташа">Наташа</option>
-                                <option value="Андрей">Андрей</option>
-                                <option value="Рома">Рома</option>
-                                <option value="Санёк">Санёк</option>
-                            </select>
+                            <select id="payer"></select>
                         </div>
                         <div class="form-group">
                             <label for="amount">Сумма (₽)</label>
@@ -566,28 +686,7 @@
 
                     <div style="margin-top: 16px;">
                         <label style="font-size: 0.85rem; font-weight: 500; color: #6b7280;">Участники</label>
-                        <div class="participants-check">
-                            <label class="participant-check">
-                                <input type="checkbox" name="participant" value="Тимур" checked>
-                                <span>Тимур</span>
-                            </label>
-                            <label class="participant-check">
-                                <input type="checkbox" name="participant" value="Наташа" checked>
-                                <span>Наташа</span>
-                            </label>
-                            <label class="participant-check">
-                                <input type="checkbox" name="participant" value="Андрей" checked>
-                                <span>Андрей</span>
-                            </label>
-                            <label class="participant-check">
-                                <input type="checkbox" name="participant" value="Рома" checked>
-                                <span>Рома</span>
-                            </label>
-                            <label class="participant-check">
-                                <input type="checkbox" name="participant" value="Санёк" checked>
-                                <span>Санёк</span>
-                            </label>
-                        </div>
+                        <div class="participants-check" id="participants-check"></div>
                     </div>
 
                     <div style="margin-top: 16px;">
@@ -605,11 +704,41 @@
                                 <line x1="12" y1="5" x2="12" y2="19"></line>
                                 <line x1="5" y1="12" x2="19" y2="12"></line>
                             </svg>
-                            Добавить
+                            <span id="submit-btn-text">Добавить</span>
                         </button>
                         <button type="button" class="btn btn-secondary" onclick="resetForm()">Сбросить</button>
+                        <button type="button" class="btn btn-secondary hidden" id="cancel-edit-btn" onclick="cancelEdit()">Отменить редактирование</button>
                     </div>
                 </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Фильтры</div>
+                <div class="filters-grid">
+                    <div class="form-group">
+                        <label for="filter-search">Поиск</label>
+                        <input type="text" id="filter-search" placeholder="Описание, категория...">
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-category">Категория</label>
+                        <select id="filter-category"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-payer">Кто платил</label>
+                        <select id="filter-payer"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-from">С даты</label>
+                        <input type="date" id="filter-from">
+                    </div>
+                    <div class="form-group">
+                        <label for="filter-to">По дату</label>
+                        <input type="date" id="filter-to">
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="resetFilters()">Сбросить фильтры</button>
+                </div>
             </div>
 
             <div class="card">
@@ -621,11 +750,11 @@
                     <table id="expenses-table">
                         <thead>
                             <tr>
-                                <th>Дата</th>
-                                <th>Описание</th>
-                                <th>Категория</th>
-                                <th>Платил</th>
-                                <th>Сумма</th>
+                                <th class="sortable" onclick="setSort('date')">Дата <span id="sort-date"></span></th>
+                                <th class="sortable" onclick="setSort('description')">Описание <span id="sort-description"></span></th>
+                                <th class="sortable" onclick="setSort('category')">Категория <span id="sort-category"></span></th>
+                                <th class="sortable" onclick="setSort('payer')">Платил <span id="sort-payer"></span></th>
+                                <th class="sortable" onclick="setSort('amount')">Сумма <span id="sort-amount"></span></th>
                                 <th>Деление</th>
                                 <th></th>
                             </tr>
@@ -650,22 +779,154 @@
                 <div class="card-title">Кто кому должен</div>
                 <div id="debts-list"></div>
             </div>
+
+            <div class="card">
+                <div class="card-title">История взаиморасчётов</div>
+                <div id="settlements-list"></div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Экспорт данных</div>
+                <div class="btn-group" style="margin-top: 0;">
+                    <button class="btn btn-secondary" onclick="exportExpenses()">Расходы (CSV)</button>
+                    <button class="btn btn-secondary" onclick="exportPersonal()">Личные траты (CSV)</button>
+                    <button class="btn btn-secondary" onclick="exportSettlements()">Взаиморасчёты (CSV)</button>
+                    <button class="btn btn-secondary" onclick="exportBackup()">Полная копия (JSON)</button>
+                </div>
+                <p class="hint">CSV открывается в Excel и Google Таблицах. JSON — полная резервная копия всех данных.</p>
+            </div>
+        </div>
+
+        <div id="dashboard-tab" class="hidden">
+            <div class="card">
+                <div class="card-title">Расходы по категориям</div>
+                <div class="chart-container">
+                    <canvas id="category-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Динамика расходов</div>
+                <div class="chart-container">
+                    <canvas id="timeline-chart"></canvas>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Матрица переводов (кто кому)</div>
+                <div class="table-wrapper">
+                    <table class="matrix-table" id="matrix-table"></table>
+                </div>
+            </div>
+        </div>
+
+        <div id="personal-tab" class="hidden">
+            <div class="card">
+                <div class="card-title">Личные траты</div>
+                <div class="person-select" id="person-select"></div>
+
+                <form id="personal-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="personal-date">Дата</label>
+                            <input type="date" id="personal-date" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="personal-description">Описание</label>
+                            <input type="text" id="personal-description" placeholder="Например: Сувениры" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="personal-category">Категория</label>
+                            <select id="personal-category"></select>
+                        </div>
+                        <div class="form-group">
+                            <label for="personal-amount">Сумма (₽)</label>
+                            <input type="number" id="personal-amount" step="0.01" min="0" placeholder="0.00" required>
+                        </div>
+                    </div>
+
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="personal-submit-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="12" y1="5" x2="12" y2="19"></line>
+                                <line x1="5" y1="12" x2="19" y2="12"></line>
+                            </svg>
+                            <span id="personal-submit-btn-text">Добавить</span>
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="resetPersonalForm()">Сбросить</button>
+                        <button type="button" class="btn btn-secondary hidden" id="personal-cancel-edit-btn" onclick="cancelPersonalEdit()">Отменить редактирование</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">
+                    <span id="personal-expenses-title">Личные траты</span>
+                </div>
+                <div class="table-wrapper">
+                    <table id="personal-expenses-table">
+                        <thead>
+                            <tr>
+                                <th>Дата</th>
+                                <th>Описание</th>
+                                <th>Категория</th>
+                                <th>Сумма</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="personal-expenses-body"></tbody>
+                    </table>
+                </div>
+                <div id="personal-empty-state" class="empty-state hidden">
+                    <div class="empty-state-icon">🧾</div>
+                    <p>Пока нет личных трат.</p>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Итого по участнику</div>
+                <div class="summary-grid" id="personal-totals"></div>
+            </div>
+        </div>
+
+        <div id="people-tab" class="hidden">
+            <div class="card">
+                <div class="card-title">Участники поездки</div>
+                <div id="people-list"></div>
+                <p class="hint">При переименовании участник автоматически переименуется во всех расходах, личных тратах и взаиморасчётах. Удалить можно только того, кто нигде не участвует.</p>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Добавить участника</div>
+                <form id="person-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="new-person-name">Имя</label>
+                            <input type="text" id="new-person-name" placeholder="Например: Катя" required>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="person-submit-btn">Добавить</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
     <div id="delete-confirm" class="delete-confirm hidden">
         <div class="delete-confirm-content">
-            <h3>Удалить расход?</h3>
-            <p>Это действие нельзя отменить.</p>
+            <h3 id="confirm-title">Удалить расход?</h3>
+            <p id="confirm-text">Это действие нельзя отменить.</p>
             <div class="delete-confirm-actions">
-                <button class="btn btn-secondary" onclick="cancelDelete()">Отмена</button>
-                <button class="btn btn-danger" onclick="confirmDelete()">Удалить</button>
+                <button class="btn btn-secondary" onclick="confirmNo()">Отмена</button>
+                <button class="btn btn-danger" onclick="confirmYes()">Удалить</button>
             </div>
         </div>
     </div>
 
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+        import Chart from 'https://esm.sh/chart.js@4/auto';
 
         // ============================================
         // НАСТРОЙКИ - ВСТАВЬТЕ ВАШИ ДАННЫЕ ИЗ SUPABASE
@@ -676,51 +937,384 @@
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        const PARTICIPANTS = ['Тимур', 'Наташа', 'Андрей', 'Рома', 'Санёк'];
+        const DEFAULT_PARTICIPANTS = ['Тимур', 'Наташа', 'Андрей', 'Рома', 'Санёк'];
+        const CATEGORIES = ['Жильё', 'Транспорт', 'Еда', 'Развлечения', 'Прочее'];
+        const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
+        const TABS = ['expenses', 'summary', 'dashboard', 'personal', 'people'];
+        const CACHE_KEY = 'trip-calc-cache-v1';
+        const QUEUE_KEY = 'trip-calc-queue-v1';
+
+        let participants = [];
         let expenses = [];
+        let personalExpenses = [];
+        let settlements = [];
+
         let splitMode = 'equal';
-        let deleteId = null;
+        let editingExpenseId = null;
+        let editingPersonalId = null;
+        let selectedPerson = null;
+        let currentTab = 'expenses';
+        let filters = { search: '', category: '', payer: '', from: '', to: '' };
+        let sortKey = 'date';
+        let sortDir = 'desc';
 
-        function setStatus(type, message) {
-            const bar = document.getElementById('status-bar');
-            bar.className = `status-bar ${type}`;
-            if (type === 'loading') {
-                bar.innerHTML = `<div class="spinner"></div><span>${message}</span>`;
-            } else {
-                bar.innerHTML = `<span>${message}</span>`;
-            }
-        }
+        let pendingQueue = [];
+        let confirmAction = null;
+        let connected = false;
+        let categoryChart = null;
+        let timelineChart = null;
+        let realtimeChannel = null;
+        let refetchTimer = null;
 
-        async function init() {
-            document.getElementById('date').valueAsDate = new Date();
+        const names = () => participants.map(p => p.name);
 
+        // ============================================
+        // Локальный кэш и очередь офлайн-изменений
+        // ============================================
+
+        function loadCache() {
             try {
-                const { data, error } = await supabase
-                    .from('expenses')
-                    .select('*')
-                    .order('date', { ascending: false });
-
-                if (error) throw error;
-
-                expenses = data || [];
-                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
-                renderExpenses();
+                const raw = localStorage.getItem(CACHE_KEY);
+                if (!raw) return;
+                const cache = JSON.parse(raw);
+                participants = cache.participants || [];
+                expenses = cache.expenses || [];
+                personalExpenses = cache.personalExpenses || [];
+                settlements = cache.settlements || [];
             } catch (err) {
-                console.error('Supabase error:', err);
-                setStatus('disconnected', 'Ошибка подключения. Проверьте настройки.');
+                console.warn('Не удалось прочитать кэш:', err);
             }
         }
 
-        function setSplitMode(mode) {
+        function saveCache() {
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ participants, expenses, personalExpenses, settlements }));
+            } catch (err) {
+                console.warn('Не удалось сохранить кэш:', err);
+            }
+        }
+
+        function loadQueue() {
+            try {
+                pendingQueue = JSON.parse(localStorage.getItem(QUEUE_KEY) || '[]');
+            } catch {
+                pendingQueue = [];
+            }
+        }
+
+        function saveQueue() {
+            try {
+                localStorage.setItem(QUEUE_KEY, JSON.stringify(pendingQueue));
+            } catch (err) {
+                console.warn('Не удалось сохранить очередь:', err);
+            }
+        }
+
+        function isLocalId(id) {
+            return typeof id === 'string' && id.startsWith('local-');
+        }
+
+        function collectionOf(table) {
+            if (table === 'expenses') return expenses;
+            if (table === 'personal_expenses') return personalExpenses;
+            if (table === 'participants') return participants;
+            if (table === 'settlements') return settlements;
+            return [];
+        }
+
+        async function dbInsert(table, row) {
+            if (!navigator.onLine) {
+                const local = { ...row, id: 'local-' + crypto.randomUUID() };
+                pendingQueue.push({ op: 'insert', table, row, tempId: local.id });
+                saveQueue();
+                return local;
+            }
+            const { data, error } = await supabase.from(table).insert([row]).select().single();
+            if (error) throw error;
+            return data;
+        }
+
+        async function dbUpdate(table, id, patch) {
+            if (isLocalId(id)) {
+                const queued = pendingQueue.find(q => q.op === 'insert' && q.tempId === id);
+                if (queued) {
+                    Object.assign(queued.row, patch);
+                    saveQueue();
+                    return { ...queued.row, id };
+                }
+            }
+            if (!navigator.onLine) {
+                pendingQueue.push({ op: 'update', table, id, row: patch });
+                saveQueue();
+                const existing = collectionOf(table).find(r => r.id === id) || {};
+                return { ...existing, ...patch, id };
+            }
+            const { data, error } = await supabase.from(table).update(patch).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        }
+
+        async function dbDelete(table, id) {
+            if (isLocalId(id)) {
+                pendingQueue = pendingQueue.filter(q => !(q.op === 'insert' && q.tempId === id));
+                saveQueue();
+                return;
+            }
+            if (!navigator.onLine) {
+                pendingQueue.push({ op: 'delete', table, id });
+                saveQueue();
+                return;
+            }
+            const { error } = await supabase.from(table).delete().eq('id', id);
+            if (error) throw error;
+        }
+
+        function replaceTempRow(table, tempId, row) {
+            const list = collectionOf(table);
+            const idx = list.findIndex(r => r.id === tempId);
+            if (idx !== -1) list[idx] = row;
+        }
+
+        async function flushQueue() {
+            if (!navigator.onLine || pendingQueue.length === 0) return;
+
+            while (pendingQueue.length > 0) {
+                const item = pendingQueue[0];
+                try {
+                    if (item.op === 'insert') {
+                        const { data, error } = await supabase.from(item.table).insert([item.row]).select().single();
+                        if (error) throw error;
+                        replaceTempRow(item.table, item.tempId, data);
+                    } else if (item.op === 'update') {
+                        const { error } = await supabase.from(item.table).update(item.row).eq('id', item.id);
+                        if (error) throw error;
+                    } else if (item.op === 'delete') {
+                        const { error } = await supabase.from(item.table).delete().eq('id', item.id);
+                        if (error) throw error;
+                    }
+                } catch (err) {
+                    console.error('Ошибка синхронизации:', err);
+                    updateStatus();
+                    return;
+                }
+                pendingQueue.shift();
+                saveQueue();
+            }
+
+            saveCache();
+            updateStatus();
+        }
+
+        // ============================================
+        // Загрузка данных
+        // ============================================
+
+        async function fetchAll() {
+            const [p, e, pe, s] = await Promise.all([
+                supabase.from('participants').select('*').order('sort_order', { ascending: true }),
+                supabase.from('expenses').select('*').order('date', { ascending: false }),
+                supabase.from('personal_expenses').select('*').order('date', { ascending: false }),
+                supabase.from('settlements').select('*').order('date', { ascending: false })
+            ]);
+
+            if (e.error) throw e.error;
+            expenses = e.data || [];
+
+            if (!p.error && (p.data || []).length > 0) {
+                participants = p.data;
+            } else if (participants.length === 0) {
+                participants = DEFAULT_PARTICIPANTS.map((name, i) => ({ id: 'default-' + i, name, sort_order: i }));
+            }
+
+            if (!pe.error) personalExpenses = pe.data || [];
+            if (!s.error) settlements = s.data || [];
+
+            if (!selectedPerson || !names().includes(selectedPerson)) {
+                selectedPerson = names()[0] || null;
+            }
+
+            connected = true;
+            saveCache();
+        }
+
+        function subscribeRealtime() {
+            if (realtimeChannel) supabase.removeChannel(realtimeChannel);
+
+            realtimeChannel = supabase
+                .channel('trip-calc')
+                .on('postgres_changes', { event: '*', schema: 'public' }, () => {
+                    clearTimeout(refetchTimer);
+                    refetchTimer = setTimeout(async () => {
+                        try {
+                            await fetchAll();
+                            renderAll();
+                            updateStatus();
+                        } catch (err) {
+                            console.error('Ошибка обновления:', err);
+                        }
+                    }, 300);
+                })
+                .subscribe();
+        }
+
+        function updateStatus() {
+            const bar = document.getElementById('status-bar');
+
+            if (!navigator.onLine) {
+                bar.className = 'status-bar offline';
+                const pending = pendingQueue.length ? ` • ${pendingQueue.length} изм. ждёт отправки` : '';
+                bar.innerHTML = `<span>Офлайн — работаем с локальной копией${pending}</span>`;
+                return;
+            }
+
+            if (pendingQueue.length > 0) {
+                bar.className = 'status-bar loading';
+                bar.innerHTML = `<div class="spinner"></div><span>Синхронизация: осталось ${pendingQueue.length}</span>`;
+                return;
+            }
+
+            if (connected) {
+                bar.className = 'status-bar connected';
+                bar.innerHTML = `<span>Подключено к облаку • ${expenses.length} расходов</span>`;
+            } else {
+                bar.className = 'status-bar disconnected';
+                bar.innerHTML = `<span>Ошибка подключения. Проверьте настройки.</span>`;
+            }
+        }
+
+        // ============================================
+        // Расчёты
+        // ============================================
+
+        function splitEqually(amount, people) {
+            const cents = Math.round(amount * 100);
+            const base = Math.floor(cents / people.length);
+            const extra = cents - base * people.length;
+            const result = {};
+            people.forEach((p, i) => {
+                result[p] = (base + (i < extra ? 1 : 0)) / 100;
+            });
+            return result;
+        }
+
+        function computeCommonBalances() {
+            const summary = {};
+            names().forEach(p => {
+                summary[p] = { paid: 0, spent: 0, settledOut: 0, settledIn: 0 };
+            });
+
+            expenses.forEach(exp => {
+                if (summary[exp.payer]) {
+                    summary[exp.payer].paid += Number(exp.amount) || 0;
+                }
+                Object.entries(exp.splits || {}).forEach(([p, amount]) => {
+                    if (summary[p]) {
+                        summary[p].spent += Number(amount) || 0;
+                    }
+                });
+            });
+
+            settlements.forEach(st => {
+                if (summary[st.from_person]) summary[st.from_person].settledOut += Number(st.amount) || 0;
+                if (summary[st.to_person]) summary[st.to_person].settledIn += Number(st.amount) || 0;
+            });
+
+            Object.values(summary).forEach(s => {
+                s.balance = s.paid - s.spent + s.settledOut - s.settledIn;
+            });
+
+            return summary;
+        }
+
+        function computeDebts(summary) {
+            const debtors = [];
+            const creditors = [];
+
+            names().forEach(p => {
+                const balance = summary[p].balance;
+                if (balance < -0.01) debtors.push({ name: p, amount: -balance });
+                else if (balance > 0.01) creditors.push({ name: p, amount: balance });
+            });
+
+            debtors.sort((a, b) => b.amount - a.amount);
+            creditors.sort((a, b) => b.amount - a.amount);
+
+            const debts = [];
+            let i = 0, j = 0;
+
+            while (i < debtors.length && j < creditors.length) {
+                const amount = Math.min(debtors[i].amount, creditors[j].amount);
+                if (amount > 0.01) {
+                    debts.push({ from: debtors[i].name, to: creditors[j].name, amount });
+                }
+                debtors[i].amount -= amount;
+                creditors[j].amount -= amount;
+                if (debtors[i].amount < 0.01) i++;
+                if (creditors[j].amount < 0.01) j++;
+            }
+
+            return debts;
+        }
+
+        // ============================================
+        // Форма расхода
+        // ============================================
+
+        function renderParticipantInputs() {
+            const list = names();
+
+            const payer = document.getElementById('payer');
+            const prevPayer = payer.value;
+            payer.innerHTML = list.map(p => `<option value="${p}">${p}</option>`).join('');
+            if (list.includes(prevPayer)) payer.value = prevPayer;
+
+            const checks = document.getElementById('participants-check');
+            const previouslyChecked = new Set(getCheckedParticipants());
+            const isFirstRender = checks.children.length === 0;
+            checks.innerHTML = list.map(p => `
+                <label class="participant-check">
+                    <input type="checkbox" name="participant" value="${p}" ${isFirstRender || previouslyChecked.has(p) ? 'checked' : ''}>
+                    <span>${p}</span>
+                </label>
+            `).join('');
+            checks.querySelectorAll('input[name="participant"]').forEach(cb => {
+                cb.addEventListener('change', () => {
+                    if (splitMode === 'manual') renderManualSplits();
+                });
+            });
+
+            const filterPayer = document.getElementById('filter-payer');
+            const prevFilterPayer = filterPayer.value;
+            filterPayer.innerHTML = '<option value="">Все</option>' + list.map(p => `<option value="${p}">${p}</option>`).join('');
+            filterPayer.value = list.includes(prevFilterPayer) ? prevFilterPayer : '';
+        }
+
+        function renderCategoryOptions() {
+            const options = CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+            const category = document.getElementById('category');
+            const prev = category.value;
+            category.innerHTML = options;
+            if (CATEGORIES.includes(prev)) category.value = prev;
+
+            const personalCategory = document.getElementById('personal-category');
+            const prevPersonal = personalCategory.value;
+            personalCategory.innerHTML = options;
+            if (CATEGORIES.includes(prevPersonal)) personalCategory.value = prevPersonal;
+
+            const filterCategory = document.getElementById('filter-category');
+            const prevFilter = filterCategory.value;
+            filterCategory.innerHTML = '<option value="">Все</option>' + options;
+            filterCategory.value = CATEGORIES.includes(prevFilter) ? prevFilter : '';
+        }
+
+        window.setSplitMode = function(mode) {
             splitMode = mode;
             document.querySelectorAll('.split-option').forEach((el, i) => {
                 el.classList.toggle('active', (i === 0 && mode === 'equal') || (i === 1 && mode === 'manual'));
             });
             document.getElementById('manual-splits').classList.toggle('hidden', mode === 'equal');
-            if (mode === 'manual') {
-                renderManualSplits();
-            }
-        }
+            if (mode === 'manual') renderManualSplits();
+        };
 
         function renderManualSplits() {
             const container = document.getElementById('manual-splits');
@@ -734,6 +1328,9 @@
             `).join('') + `
                 <div id="split-total" class="total-check">Сумма: 0 ₽</div>
             `;
+            container.querySelectorAll('.manual-split-input').forEach(el => {
+                el.addEventListener('input', updateSplitTotal);
+            });
             updateSplitTotal();
         }
 
@@ -753,25 +1350,18 @@
         });
 
         function getCheckedParticipants() {
-            return Array.from(document.querySelectorAll('input[name="participant"]:checked'))
-                .map(el => el.value);
+            return Array.from(document.querySelectorAll('input[name="participant"]:checked')).map(el => el.value);
         }
-
-        document.querySelectorAll('input[name="participant"]').forEach(cb => {
-            cb.addEventListener('change', () => {
-                if (splitMode === 'manual') renderManualSplits();
-            });
-        });
 
         document.getElementById('expense-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const btn = document.getElementById('submit-btn');
             btn.disabled = true;
 
-            const participants = getCheckedParticipants();
+            const chosen = getCheckedParticipants();
             const amount = parseFloat(document.getElementById('amount').value);
 
-            if (participants.length === 0) {
+            if (chosen.length === 0) {
                 alert('Выберите хотя бы одного участника');
                 btn.disabled = false;
                 return;
@@ -779,8 +1369,7 @@
 
             let splits = {};
             if (splitMode === 'equal') {
-                const share = amount / participants.length;
-                participants.forEach(p => splits[p] = share);
+                splits = splitEqually(amount, chosen);
             } else {
                 document.querySelectorAll('.manual-split-input').forEach(el => {
                     const val = parseFloat(el.value) || 0;
@@ -794,61 +1383,190 @@
                 }
             }
 
-            const expense = {
+            const payload = {
                 date: document.getElementById('date').value,
                 description: document.getElementById('description').value,
                 category: document.getElementById('category').value,
                 payer: document.getElementById('payer').value,
-                amount: amount,
+                amount,
                 split_mode: splitMode,
-                participants: participants,
-                splits: splits
+                participants: chosen,
+                splits
             };
 
             try {
-                const { data, error } = await supabase
-                    .from('expenses')
-                    .insert([expense])
-                    .select()
-                    .single();
-
-                if (error) throw error;
-
-                expenses.unshift(data);
-                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
-                renderExpenses();
-                resetForm();
+                if (editingExpenseId) {
+                    const updated = await dbUpdate('expenses', editingExpenseId, payload);
+                    const idx = expenses.findIndex(x => x.id === editingExpenseId);
+                    if (idx !== -1) expenses[idx] = { ...expenses[idx], ...updated };
+                    cancelEdit();
+                } else {
+                    const created = await dbInsert('expenses', payload);
+                    expenses.unshift(created);
+                    resetForm();
+                }
+                saveCache();
+                renderAll();
+                updateStatus();
             } catch (err) {
-                console.error('Insert error:', err);
+                console.error('Ошибка сохранения:', err);
                 alert('Ошибка сохранения. Попробуйте ещё раз.');
             }
 
             btn.disabled = false;
         });
 
-        function resetForm() {
+        window.resetForm = function() {
             document.getElementById('description').value = '';
             document.getElementById('amount').value = '';
             document.getElementById('date').valueAsDate = new Date();
             setSplitMode('equal');
+        };
+
+        window.cancelEdit = function() {
+            editingExpenseId = null;
+            document.getElementById('expense-form-title').textContent = 'Добавить расход';
+            document.getElementById('submit-btn-text').textContent = 'Добавить';
+            document.getElementById('cancel-edit-btn').classList.add('hidden');
+            resetForm();
+            document.querySelectorAll('input[name="participant"]').forEach(cb => { cb.checked = true; });
+        };
+
+        window.editExpense = function(id) {
+            const exp = expenses.find(e => e.id === id);
+            if (!exp) return;
+
+            editingExpenseId = id;
+            document.getElementById('expense-form-title').textContent = 'Редактировать расход';
+            document.getElementById('submit-btn-text').textContent = 'Сохранить';
+            document.getElementById('cancel-edit-btn').classList.remove('hidden');
+
+            document.getElementById('date').value = exp.date;
+            document.getElementById('description').value = exp.description;
+            document.getElementById('category').value = exp.category;
+            document.getElementById('payer').value = exp.payer;
+            document.getElementById('amount').value = exp.amount;
+
+            document.querySelectorAll('input[name="participant"]').forEach(cb => {
+                cb.checked = (exp.participants || []).includes(cb.value);
+            });
+
+            setSplitMode(exp.split_mode);
+            if (exp.split_mode === 'manual') {
+                document.querySelectorAll('.manual-split-input').forEach(el => {
+                    const value = (exp.splits || {})[el.dataset.participant];
+                    if (value != null) el.value = value;
+                });
+                updateSplitTotal();
+            }
+
+            document.getElementById('expense-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.deleteExpense = function(id) {
+            askConfirm('Удалить расход?', 'Это действие нельзя отменить.', async () => {
+                try {
+                    await dbDelete('expenses', id);
+                    expenses = expenses.filter(e => e.id !== id);
+                    if (editingExpenseId === id) cancelEdit();
+                    saveCache();
+                    renderAll();
+                    updateStatus();
+                } catch (err) {
+                    console.error('Ошибка удаления:', err);
+                    alert('Не удалось удалить запись.');
+                }
+            });
+        };
+
+        // ============================================
+        // Список расходов: фильтры и сортировка
+        // ============================================
+
+        function visibleExpenses() {
+            const search = filters.search.trim().toLowerCase();
+            const list = expenses.filter(e => {
+                if (search && !`${e.description} ${e.category} ${e.payer}`.toLowerCase().includes(search)) return false;
+                if (filters.category && e.category !== filters.category) return false;
+                if (filters.payer && e.payer !== filters.payer) return false;
+                if (filters.from && e.date < filters.from) return false;
+                if (filters.to && e.date > filters.to) return false;
+                return true;
+            });
+
+            list.sort((a, b) => {
+                let va = a[sortKey];
+                let vb = b[sortKey];
+                if (sortKey === 'amount') {
+                    va = Number(va) || 0;
+                    vb = Number(vb) || 0;
+                } else {
+                    va = String(va ?? '').toLowerCase();
+                    vb = String(vb ?? '').toLowerCase();
+                }
+                if (va < vb) return sortDir === 'asc' ? -1 : 1;
+                if (va > vb) return sortDir === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            return list;
         }
+
+        window.setSort = function(key) {
+            if (sortKey === key) {
+                sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortKey = key;
+                sortDir = key === 'date' || key === 'amount' ? 'desc' : 'asc';
+            }
+            renderExpenses();
+        };
+
+        window.resetFilters = function() {
+            filters = { search: '', category: '', payer: '', from: '', to: '' };
+            document.getElementById('filter-search').value = '';
+            document.getElementById('filter-category').value = '';
+            document.getElementById('filter-payer').value = '';
+            document.getElementById('filter-from').value = '';
+            document.getElementById('filter-to').value = '';
+            renderExpenses();
+        };
+
+        ['search', 'category', 'payer', 'from', 'to'].forEach(key => {
+            const el = document.getElementById('filter-' + key);
+            el.addEventListener('input', () => {
+                filters[key] = el.value;
+                renderExpenses();
+            });
+        });
 
         function renderExpenses() {
             const tbody = document.getElementById('expenses-body');
             const emptyState = document.getElementById('empty-state');
             const countEl = document.getElementById('expense-count');
+            const list = visibleExpenses();
 
-            if (expenses.length === 0) {
+            ['date', 'description', 'category', 'payer', 'amount'].forEach(key => {
+                const el = document.getElementById('sort-' + key);
+                if (el) el.textContent = sortKey === key ? (sortDir === 'asc' ? '▲' : '▼') : '';
+            });
+
+            if (list.length === 0) {
                 tbody.innerHTML = '';
                 emptyState.classList.remove('hidden');
-                countEl.textContent = '';
+                emptyState.querySelector('p').textContent = expenses.length === 0
+                    ? 'Пока нет расходов. Добавьте первый!'
+                    : 'Под фильтры ничего не подошло.';
+                countEl.textContent = expenses.length ? `(0 из ${expenses.length})` : '';
                 return;
             }
 
             emptyState.classList.add('hidden');
-            countEl.textContent = `(${expenses.length})`;
+            countEl.textContent = list.length === expenses.length
+                ? `(${expenses.length})`
+                : `(${list.length} из ${expenses.length})`;
 
-            tbody.innerHTML = expenses.map(exp => `
+            tbody.innerHTML = list.map(exp => `
                 <tr>
                     <td>${formatDate(exp.date)}</td>
                     <td>${exp.description}</td>
@@ -866,97 +1584,23 @@
             `).join('');
         }
 
-        window.editExpense = async function(id) {
-            const exp = expenses.find(e => e.id === id);
-            if (!exp) return;
-
-            document.getElementById('date').value = exp.date;
-            document.getElementById('description').value = exp.description;
-            document.getElementById('category').value = exp.category;
-            document.getElementById('payer').value = exp.payer;
-            document.getElementById('amount').value = exp.amount;
-
-            document.querySelectorAll('input[name="participant"]').forEach(cb => {
-                cb.checked = exp.participants.includes(cb.value);
-            });
-
-            setSplitMode(exp.split_mode);
-            if (exp.split_mode === 'manual') {
-                setTimeout(() => {
-                    document.querySelectorAll('.manual-split-input').forEach(el => {
-                        if (exp.splits[el.dataset.participant]) {
-                            el.value = exp.splits[el.dataset.participant];
-                        }
-                    });
-                    updateSplitTotal();
-                }, 10);
-            }
-
-            try {
-                await supabase.from('expenses').delete().eq('id', id);
-                expenses = expenses.filter(e => e.id !== id);
-                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
-                renderExpenses();
-            } catch (err) {
-                console.error('Delete error:', err);
-            }
-
-            document.getElementById('expense-form').scrollIntoView({ behavior: 'smooth' });
-        };
-
-        window.deleteExpense = function(id) {
-            deleteId = id;
-            document.getElementById('delete-confirm').classList.remove('hidden');
-        };
-
-        window.confirmDelete = async function() {
-            try {
-                await supabase.from('expenses').delete().eq('id', deleteId);
-                expenses = expenses.filter(e => e.id !== deleteId);
-                setStatus('connected', `Подключено к облаку • ${expenses.length} расходов`);
-                renderExpenses();
-            } catch (err) {
-                console.error('Delete error:', err);
-            }
-            cancelDelete();
-        };
-
-        window.cancelDelete = function() {
-            deleteId = null;
-            document.getElementById('delete-confirm').classList.add('hidden');
-        };
-
-        window.showTab = function(tab) {
-            document.querySelectorAll('.tab').forEach((el, i) => {
-                el.classList.toggle('active', (i === 0 && tab === 'expenses') || (i === 1 && tab === 'summary'));
-            });
-            document.getElementById('expenses-tab').classList.toggle('hidden', tab !== 'expenses');
-            document.getElementById('summary-tab').classList.toggle('hidden', tab !== 'summary');
-            if (tab === 'summary') updateSummary();
-        };
+        // ============================================
+        // Итоги, долги и взаиморасчёты
+        // ============================================
 
         function updateSummary() {
-            const summary = {};
-            PARTICIPANTS.forEach(p => {
-                summary[p] = { paid: 0, spent: 0 };
-            });
-
-            expenses.forEach(exp => {
-                if (summary[exp.payer]) {
-                    summary[exp.payer].paid += exp.amount;
-                }
-                Object.entries(exp.splits).forEach(([p, amount]) => {
-                    if (summary[p]) {
-                        summary[p].spent += amount;
-                    }
-                });
-            });
-
+            const summary = computeCommonBalances();
             const grid = document.getElementById('summary-grid');
-            grid.innerHTML = PARTICIPANTS.map(p => {
+
+            grid.innerHTML = names().map(p => {
                 const s = summary[p];
-                const balance = s.paid - s.spent;
-                const balanceClass = balance > 0.01 ? 'balance-positive' : balance < -0.01 ? 'balance-negative' : 'balance-zero';
+                const balanceClass = s.balance > 0.01 ? 'balance-positive' : s.balance < -0.01 ? 'balance-negative' : 'balance-zero';
+                const settledRow = (s.settledOut || s.settledIn)
+                    ? `<div class="summary-item-row">
+                           <span>Взаиморасчёты:</span>
+                           <span class="amount">${s.settledOut ? '−' : ''}${formatCurrency(s.settledOut || s.settledIn)}</span>
+                       </div>`
+                    : '';
                 return `
                     <div class="summary-item">
                         <div class="summary-item-name">${p}</div>
@@ -968,67 +1612,611 @@
                             <span>Потратил:</span>
                             <span class="amount">${formatCurrency(s.spent)}</span>
                         </div>
+                        ${settledRow}
                         <div class="summary-item-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
                             <span>Баланс:</span>
-                            <span class="${balanceClass}">${balance >= 0 ? '+' : ''}${formatCurrency(balance)}</span>
+                            <span class="${balanceClass}">${s.balance >= 0 ? '+' : ''}${formatCurrency(s.balance)}</span>
                         </div>
                     </div>
                 `;
             }).join('');
 
-            calculateDebts(summary);
+            renderDebts(summary);
+            renderSettlements();
         }
 
-        function calculateDebts(summary) {
-            const debtors = [];
-            const creditors = [];
-
-            PARTICIPANTS.forEach(p => {
-                const balance = summary[p].paid - summary[p].spent;
-                if (balance < -0.01) {
-                    debtors.push({ name: p, amount: -balance });
-                } else if (balance > 0.01) {
-                    creditors.push({ name: p, amount: balance });
-                }
-            });
-
-            debtors.sort((a, b) => b.amount - a.amount);
-            creditors.sort((a, b) => b.amount - a.amount);
-
-            const debts = [];
-            let i = 0, j = 0;
-
-            while (i < debtors.length && j < creditors.length) {
-                const amount = Math.min(debtors[i].amount, creditors[j].amount);
-                if (amount > 0.01) {
-                    debts.push({
-                        from: debtors[i].name,
-                        to: creditors[j].name,
-                        amount: amount
-                    });
-                }
-                debtors[i].amount -= amount;
-                creditors[j].amount -= amount;
-                if (debtors[i].amount < 0.01) i++;
-                if (creditors[j].amount < 0.01) j++;
-            }
-
+        function renderDebts(summary) {
+            const debts = computeDebts(summary);
             const container = document.getElementById('debts-list');
+
             if (debts.length === 0) {
                 container.innerHTML = '<div class="empty-state"><p>Все рассчитались! 🎉</p></div>';
-            } else {
-                container.innerHTML = debts.map(d => `
-                    <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: #f8f9fa; border-radius: 8px; margin-bottom: 8px;">
-                        <span style="font-weight: 600;">${d.from}</span>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
-                            <line x1="5" y1="12" x2="19" y2="12"></line>
-                            <polyline points="12 5 19 12 12 19"></polyline>
-                        </svg>
-                        <span style="font-weight: 600;">${d.to}</span>
-                        <span style="margin-left: auto; font-weight: 600; color: #2563eb;">${formatCurrency(d.amount)}</span>
-                    </div>
-                `).join('');
+                return;
             }
+
+            container.innerHTML = debts.map(d => `
+                <div class="debt-row">
+                    <span style="font-weight: 600;">${d.from}</span>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                        <polyline points="12 5 19 12 12 19"></polyline>
+                    </svg>
+                    <span style="font-weight: 600;">${d.to}</span>
+                    <span style="margin-left: auto; font-weight: 600; color: #2563eb;">${formatCurrency(d.amount)}</span>
+                    <button class="btn btn-success btn-sm" onclick="settleDebt('${encodeURIComponent(d.from)}', '${encodeURIComponent(d.to)}', ${d.amount.toFixed(2)})">Погасить</button>
+                </div>
+            `).join('');
+        }
+
+        window.settleDebt = function(fromEnc, toEnc, amount) {
+            const from = decodeURIComponent(fromEnc);
+            const to = decodeURIComponent(toEnc);
+            askConfirm(
+                'Отметить перевод?',
+                `${from} возвращает ${to} ${formatCurrency(amount)}. Долг будет учтён как погашенный.`,
+                async () => {
+                    try {
+                        const row = {
+                            date: new Date().toISOString().slice(0, 10),
+                            from_person: from,
+                            to_person: to,
+                            amount: Number(amount)
+                        };
+                        const created = await dbInsert('settlements', row);
+                        settlements.unshift(created);
+                        saveCache();
+                        renderAll();
+                        updateStatus();
+                    } catch (err) {
+                        console.error('Ошибка сохранения взаиморасчёта:', err);
+                        alert('Не удалось сохранить взаиморасчёт. Убедитесь, что таблица settlements создана в Supabase.');
+                    }
+                },
+                'Подтвердить'
+            );
+        };
+
+        function renderSettlements() {
+            const container = document.getElementById('settlements-list');
+
+            if (settlements.length === 0) {
+                container.innerHTML = '<div class="empty-state"><p>Переводов пока не было.</p></div>';
+                return;
+            }
+
+            container.innerHTML = settlements.map(s => `
+                <div class="settlement-row">
+                    <span style="color: #6b7280;">${formatDate(s.date)}</span>
+                    <span style="font-weight: 600;">${s.from_person}</span>
+                    <span style="color: #6b7280;">→</span>
+                    <span style="font-weight: 600;">${s.to_person}</span>
+                    <span style="margin-left: auto; font-weight: 600; color: #059669;">${formatCurrency(s.amount)}</span>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSettlement('${s.id}')">Уд.</button>
+                </div>
+            `).join('');
+        }
+
+        window.deleteSettlement = function(id) {
+            askConfirm('Удалить взаиморасчёт?', 'Долг снова станет непогашенным.', async () => {
+                try {
+                    await dbDelete('settlements', id);
+                    settlements = settlements.filter(s => s.id !== id);
+                    saveCache();
+                    renderAll();
+                    updateStatus();
+                } catch (err) {
+                    console.error('Ошибка удаления:', err);
+                    alert('Не удалось удалить запись.');
+                }
+            });
+        };
+
+        // ============================================
+        // Личные траты
+        // ============================================
+
+        function renderPersonSelector() {
+            const container = document.getElementById('person-select');
+            container.innerHTML = names().map(p => `
+                <button type="button" class="${p === selectedPerson ? 'active' : ''}" onclick="selectPerson('${encodeURIComponent(p)}')">${p}</button>
+            `).join('');
+        }
+
+        window.selectPerson = function(personEnc) {
+            selectedPerson = decodeURIComponent(personEnc);
+            cancelPersonalEdit();
+            renderPersonSelector();
+            renderPersonalExpenses();
+            renderPersonalTotals();
+        };
+
+        document.getElementById('personal-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('personal-submit-btn');
+            btn.disabled = true;
+
+            const payload = {
+                person: selectedPerson,
+                date: document.getElementById('personal-date').value,
+                description: document.getElementById('personal-description').value,
+                category: document.getElementById('personal-category').value,
+                amount: parseFloat(document.getElementById('personal-amount').value)
+            };
+
+            try {
+                if (editingPersonalId) {
+                    const updated = await dbUpdate('personal_expenses', editingPersonalId, payload);
+                    const idx = personalExpenses.findIndex(x => x.id === editingPersonalId);
+                    if (idx !== -1) personalExpenses[idx] = { ...personalExpenses[idx], ...updated };
+                    cancelPersonalEdit();
+                } else {
+                    const created = await dbInsert('personal_expenses', payload);
+                    personalExpenses.unshift(created);
+                    resetPersonalForm();
+                }
+                saveCache();
+                renderPersonalExpenses();
+                renderPersonalTotals();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка сохранения:', err);
+                alert('Ошибка сохранения. Убедитесь, что таблица personal_expenses создана в Supabase.');
+            }
+
+            btn.disabled = false;
+        });
+
+        window.resetPersonalForm = function() {
+            document.getElementById('personal-description').value = '';
+            document.getElementById('personal-amount').value = '';
+            document.getElementById('personal-date').valueAsDate = new Date();
+        };
+
+        window.cancelPersonalEdit = function() {
+            editingPersonalId = null;
+            document.getElementById('personal-submit-btn-text').textContent = 'Добавить';
+            document.getElementById('personal-cancel-edit-btn').classList.add('hidden');
+            resetPersonalForm();
+        };
+
+        window.editPersonalExpense = function(id) {
+            const exp = personalExpenses.find(e => e.id === id);
+            if (!exp) return;
+
+            editingPersonalId = id;
+            selectedPerson = exp.person;
+            renderPersonSelector();
+
+            document.getElementById('personal-submit-btn-text').textContent = 'Сохранить';
+            document.getElementById('personal-cancel-edit-btn').classList.remove('hidden');
+            document.getElementById('personal-date').value = exp.date;
+            document.getElementById('personal-description').value = exp.description;
+            document.getElementById('personal-category').value = exp.category;
+            document.getElementById('personal-amount').value = exp.amount;
+
+            renderPersonalExpenses();
+            document.getElementById('personal-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        window.deletePersonalExpense = function(id) {
+            askConfirm('Удалить личную трату?', 'Это действие нельзя отменить.', async () => {
+                try {
+                    await dbDelete('personal_expenses', id);
+                    personalExpenses = personalExpenses.filter(e => e.id !== id);
+                    if (editingPersonalId === id) cancelPersonalEdit();
+                    saveCache();
+                    renderPersonalExpenses();
+                    renderPersonalTotals();
+                    updateStatus();
+                } catch (err) {
+                    console.error('Ошибка удаления:', err);
+                    alert('Не удалось удалить запись.');
+                }
+            });
+        };
+
+        function renderPersonalExpenses() {
+            const tbody = document.getElementById('personal-expenses-body');
+            const emptyState = document.getElementById('personal-empty-state');
+            const title = document.getElementById('personal-expenses-title');
+            const list = personalExpenses.filter(e => e.person === selectedPerson);
+
+            title.textContent = `Личные траты — ${selectedPerson || ''}`;
+
+            if (list.length === 0) {
+                tbody.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+            tbody.innerHTML = list.map(exp => `
+                <tr>
+                    <td>${formatDate(exp.date)}</td>
+                    <td>${exp.description}</td>
+                    <td>${exp.category}</td>
+                    <td class="amount">${formatCurrency(exp.amount)}</td>
+                    <td>
+                        <div class="actions-cell">
+                            <button class="btn btn-secondary btn-sm" onclick="editPersonalExpense('${exp.id}')">Изм.</button>
+                            <button class="btn btn-danger btn-sm" onclick="deletePersonalExpense('${exp.id}')">Уд.</button>
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPersonalTotals() {
+            const grid = document.getElementById('personal-totals');
+            if (!selectedPerson) {
+                grid.innerHTML = '';
+                return;
+            }
+
+            const summary = computeCommonBalances();
+            const personalTotal = personalExpenses
+                .filter(e => e.person === selectedPerson)
+                .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            const commonShare = summary[selectedPerson] ? summary[selectedPerson].spent : 0;
+
+            grid.innerHTML = `
+                <div class="summary-item">
+                    <div class="summary-item-name">${selectedPerson}</div>
+                    <div class="summary-item-row">
+                        <span>Личные траты:</span>
+                        <span class="amount">${formatCurrency(personalTotal)}</span>
+                    </div>
+                    <div class="summary-item-row">
+                        <span>Доля в общих:</span>
+                        <span class="amount">${formatCurrency(commonShare)}</span>
+                    </div>
+                    <div class="summary-item-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+                        <span>Итого:</span>
+                        <span class="amount">${formatCurrency(personalTotal + commonShare)}</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // ============================================
+        // Управление участниками
+        // ============================================
+
+        function participantsAreLocalDefaults() {
+            return participants.some(p => String(p.id).startsWith('default-'));
+        }
+
+        function participantUsage(name) {
+            const inExpenses = expenses.filter(e => e.payer === name || (e.participants || []).includes(name)).length;
+            const inPersonal = personalExpenses.filter(p => p.person === name).length;
+            const inSettlements = settlements.filter(s => s.from_person === name || s.to_person === name).length;
+            return inExpenses + inPersonal + inSettlements;
+        }
+
+        function renderPeople() {
+            const container = document.getElementById('people-list');
+            container.innerHTML = participants.map(p => `
+                <div class="people-row">
+                    <input type="text" value="${p.name}" data-person-id="${p.id}" class="person-name-input">
+                    <button class="btn btn-secondary btn-sm" onclick="renameParticipant('${p.id}')">Сохранить</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeParticipant('${p.id}')">Удалить</button>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('person-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-person-name');
+            const name = input.value.trim();
+            if (!name) return;
+
+            if (names().includes(name)) {
+                alert('Такой участник уже есть.');
+                return;
+            }
+
+            const btn = document.getElementById('person-submit-btn');
+            btn.disabled = true;
+
+            try {
+                const maxOrder = participants.reduce((max, p) => Math.max(max, p.sort_order || 0), -1);
+                const created = await dbInsert('participants', { name, sort_order: maxOrder + 1 });
+                participants.push(created);
+                input.value = '';
+                saveCache();
+                renderAll();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка добавления участника:', err);
+                alert('Не удалось добавить участника. Убедитесь, что таблица participants создана в Supabase.');
+            }
+
+            btn.disabled = false;
+        });
+
+        window.renameParticipant = async function(id) {
+            const person = participants.find(p => p.id === id);
+            const input = document.querySelector(`.person-name-input[data-person-id="${id}"]`);
+            if (!person || !input) return;
+
+            const newName = input.value.trim();
+            const oldName = person.name;
+
+            if (!newName || newName === oldName) return;
+            if (participantsAreLocalDefaults()) {
+                alert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
+                input.value = oldName;
+                return;
+            }
+            if (names().includes(newName)) {
+                alert('Участник с таким именем уже есть.');
+                input.value = oldName;
+                return;
+            }
+
+            try {
+                await dbUpdate('participants', id, { name: newName });
+                person.name = newName;
+
+                for (const exp of expenses) {
+                    const patch = {};
+                    if (exp.payer === oldName) patch.payer = newName;
+                    if ((exp.participants || []).includes(oldName)) {
+                        patch.participants = exp.participants.map(p => (p === oldName ? newName : p));
+                    }
+                    if (exp.splits && oldName in exp.splits) {
+                        const splits = {};
+                        Object.entries(exp.splits).forEach(([key, value]) => {
+                            splits[key === oldName ? newName : key] = value;
+                        });
+                        patch.splits = splits;
+                    }
+                    if (Object.keys(patch).length > 0) {
+                        await dbUpdate('expenses', exp.id, patch);
+                        Object.assign(exp, patch);
+                    }
+                }
+
+                for (const pe of personalExpenses) {
+                    if (pe.person === oldName) {
+                        await dbUpdate('personal_expenses', pe.id, { person: newName });
+                        pe.person = newName;
+                    }
+                }
+
+                for (const st of settlements) {
+                    const patch = {};
+                    if (st.from_person === oldName) patch.from_person = newName;
+                    if (st.to_person === oldName) patch.to_person = newName;
+                    if (Object.keys(patch).length > 0) {
+                        await dbUpdate('settlements', st.id, patch);
+                        Object.assign(st, patch);
+                    }
+                }
+
+                if (selectedPerson === oldName) selectedPerson = newName;
+                saveCache();
+                renderAll();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка переименования:', err);
+                alert('Не удалось переименовать участника.');
+                input.value = oldName;
+            }
+        };
+
+        window.removeParticipant = function(id) {
+            const person = participants.find(p => p.id === id);
+            if (!person) return;
+
+            if (participantsAreLocalDefaults()) {
+                alert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
+                return;
+            }
+
+            const usage = participantUsage(person.name);
+            if (usage > 0) {
+                alert(`${person.name} участвует в ${usage} записях. Сначала удалите или измените эти записи.`);
+                return;
+            }
+
+            if (participants.length <= 1) {
+                alert('Должен остаться хотя бы один участник.');
+                return;
+            }
+
+            askConfirm('Удалить участника?', `${person.name} будет удалён из списка.`, async () => {
+                try {
+                    await dbDelete('participants', id);
+                    participants = participants.filter(p => p.id !== id);
+                    if (selectedPerson === person.name) selectedPerson = names()[0] || null;
+                    saveCache();
+                    renderAll();
+                    updateStatus();
+                } catch (err) {
+                    console.error('Ошибка удаления участника:', err);
+                    alert('Не удалось удалить участника.');
+                }
+            });
+        };
+
+        // ============================================
+        // Дашборд
+        // ============================================
+
+        function updateDashboard() {
+            renderCategoryChart();
+            renderTimelineChart();
+            renderDebtMatrix();
+        }
+
+        function renderCategoryChart() {
+            const totals = CATEGORIES.map(cat =>
+                expenses.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+            );
+
+            if (categoryChart) categoryChart.destroy();
+            categoryChart = new Chart(document.getElementById('category-chart'), {
+                type: 'pie',
+                data: {
+                    labels: CATEGORIES,
+                    datasets: [{ data: totals, backgroundColor: CHART_COLORS }]
+                },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function renderTimelineChart() {
+            const byDate = {};
+            expenses.forEach(e => {
+                byDate[e.date] = (byDate[e.date] || 0) + (Number(e.amount) || 0);
+            });
+            const dates = Object.keys(byDate).sort();
+
+            if (timelineChart) timelineChart.destroy();
+            timelineChart = new Chart(document.getElementById('timeline-chart'), {
+                type: 'bar',
+                data: {
+                    labels: dates.map(formatDate),
+                    datasets: [{ label: 'Сумма расходов', data: dates.map(d => byDate[d]), backgroundColor: '#2563eb' }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
+        }
+
+        function renderDebtMatrix() {
+            const summary = computeCommonBalances();
+            const list = names();
+            const totalCredit = list.reduce((sum, p) => sum + Math.max(summary[p].balance, 0), 0);
+
+            let html = '<thead><tr><th></th>' + list.map(p => `<th>${p}</th>`).join('') + '</tr></thead><tbody>';
+            list.forEach(debtor => {
+                html += `<tr><th>${debtor}</th>`;
+                list.forEach(creditor => {
+                    const isDebtor = summary[debtor].balance < -0.01;
+                    const isCreditor = summary[creditor].balance > 0.01;
+                    if (debtor === creditor || !isDebtor || !isCreditor || totalCredit === 0) {
+                        html += '<td class="diagonal">—</td>';
+                    } else {
+                        const amount = Math.abs(summary[debtor].balance) * summary[creditor].balance / totalCredit;
+                        html += amount > 0.01
+                            ? `<td class="amount-cell">${formatCurrency(amount)}</td>`
+                            : '<td class="diagonal">—</td>';
+                    }
+                });
+                html += '</tr>';
+            });
+            html += '</tbody>';
+
+            document.getElementById('matrix-table').innerHTML = html;
+        }
+
+        // ============================================
+        // Экспорт
+        // ============================================
+
+        function toCsv(rows) {
+            const body = rows.map(row => row.map(cell => {
+                const value = cell == null ? '' : String(cell);
+                return /[";\n]/.test(value) ? '"' + value.replace(/"/g, '""') + '"' : value;
+            }).join(';')).join('\r\n');
+            return '﻿' + body;
+        }
+
+        function download(filename, content, type) {
+            const blob = new Blob([content], { type: type || 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            link.click();
+            URL.revokeObjectURL(url);
+        }
+
+        window.exportExpenses = function() {
+            const list = names();
+            const header = ['Дата', 'Описание', 'Категория', 'Кто платил', 'Сумма', 'Способ деления', ...list];
+            const rows = visibleExpenses().map(e => [
+                e.date,
+                e.description,
+                e.category,
+                e.payer,
+                Number(e.amount).toFixed(2),
+                e.split_mode === 'equal' ? 'Поровну' : 'Вручную',
+                ...list.map(p => ((e.splits || {})[p] != null ? Number(e.splits[p]).toFixed(2) : ''))
+            ]);
+            download('rashody.csv', toCsv([header, ...rows]));
+        };
+
+        window.exportPersonal = function() {
+            const header = ['Участник', 'Дата', 'Категория', 'Описание', 'Сумма'];
+            const rows = personalExpenses.map(e => [e.person, e.date, e.category, e.description, Number(e.amount).toFixed(2)]);
+            download('lichnye-traty.csv', toCsv([header, ...rows]));
+        };
+
+        window.exportSettlements = function() {
+            const header = ['Дата', 'От кого', 'Кому', 'Сумма'];
+            const rows = settlements.map(s => [s.date, s.from_person, s.to_person, Number(s.amount).toFixed(2)]);
+            download('vzaimoraschety.csv', toCsv([header, ...rows]));
+        };
+
+        window.exportBackup = function() {
+            const backup = {
+                exported_at: new Date().toISOString(),
+                participants,
+                expenses,
+                personal_expenses: personalExpenses,
+                settlements
+            };
+            download('backup.json', JSON.stringify(backup, null, 2), 'application/json');
+        };
+
+        // ============================================
+        // Общие утилиты и рендер
+        // ============================================
+
+        function askConfirm(title, text, onConfirm, okLabel) {
+            document.getElementById('confirm-title').textContent = title;
+            document.getElementById('confirm-text').textContent = text;
+            document.querySelector('.delete-confirm-actions .btn-danger').textContent = okLabel || 'Удалить';
+            confirmAction = onConfirm;
+            document.getElementById('delete-confirm').classList.remove('hidden');
+        }
+
+        window.confirmYes = async function() {
+            const action = confirmAction;
+            confirmAction = null;
+            document.getElementById('delete-confirm').classList.add('hidden');
+            if (action) await action();
+        };
+
+        window.confirmNo = function() {
+            confirmAction = null;
+            document.getElementById('delete-confirm').classList.add('hidden');
+        };
+
+        window.showTab = function(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach((el, i) => {
+                el.classList.toggle('active', TABS[i] === tab);
+            });
+            TABS.forEach(t => {
+                document.getElementById(`${t}-tab`).classList.toggle('hidden', t !== tab);
+            });
+            renderAll();
+        };
+
+        function renderAll() {
+            renderParticipantInputs();
+            renderExpenses();
+            if (currentTab === 'summary') updateSummary();
+            if (currentTab === 'dashboard') updateDashboard();
+            if (currentTab === 'personal') {
+                renderPersonSelector();
+                renderPersonalExpenses();
+                renderPersonalTotals();
+            }
+            if (currentTab === 'people') renderPeople();
         }
 
         function formatDate(dateStr) {
@@ -1043,6 +2231,65 @@
                 minimumFractionDigits: 0,
                 maximumFractionDigits: 2
             }).format(amount);
+        }
+
+        // ============================================
+        // Запуск
+        // ============================================
+
+        window.addEventListener('online', async () => {
+            updateStatus();
+            await flushQueue();
+            try {
+                await fetchAll();
+                subscribeRealtime();
+            } catch (err) {
+                console.error('Ошибка обновления после подключения:', err);
+            }
+            renderAll();
+            updateStatus();
+        });
+
+        window.addEventListener('offline', updateStatus);
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker не зарегистрирован:', err));
+            });
+        }
+
+        async function init() {
+            loadQueue();
+            loadCache();
+
+            document.getElementById('date').valueAsDate = new Date();
+            document.getElementById('personal-date').valueAsDate = new Date();
+            renderCategoryOptions();
+
+            if (participants.length === 0) {
+                participants = DEFAULT_PARTICIPANTS.map((name, i) => ({ id: 'default-' + i, name, sort_order: i }));
+            }
+            if (!selectedPerson) selectedPerson = names()[0] || null;
+
+            renderAll();
+            updateStatus();
+
+            if (!navigator.onLine) {
+                updateStatus();
+                return;
+            }
+
+            try {
+                await flushQueue();
+                await fetchAll();
+                subscribeRealtime();
+            } catch (err) {
+                console.error('Ошибка подключения:', err);
+                connected = false;
+            }
+
+            renderAll();
+            updateStatus();
         }
 
         init();
