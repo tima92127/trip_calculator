@@ -19,7 +19,8 @@ INSERT INTO participants (name, sort_order) VALUES
     ('Рома', 3),
     ('Санёк', 4);
 
--- Впишите email каждого участника, чтобы он мог входить и вносить изменения:
+-- Email можно не знать заранее — каждый привяжет свою почту сам кнопкой
+-- "Это я" на вкладке "Люди" после входа. Но если хотите прописать сразу:
 -- UPDATE participants SET email = 'имя@example.com' WHERE name = 'Тимур';
 
 -- Проверяет, что текущий вход (email из JWT) принадлежит участнику поездки.
@@ -45,6 +46,14 @@ CREATE POLICY "Public read" ON participants FOR SELECT USING (true);
 CREATE POLICY "Members can insert" ON participants FOR INSERT WITH CHECK (is_trip_member());
 CREATE POLICY "Members can update" ON participants FOR UPDATE USING (is_trip_member()) WITH CHECK (is_trip_member());
 CREATE POLICY "Members can delete" ON participants FOR DELETE USING (is_trip_member());
+
+-- Позволяет вошедшему по email самому "занять" ещё не привязанного участника
+-- (кнопка "Это я" в приложении) — не нужно заранее знать email всех и вручную
+-- прописывать их через UPDATE.
+CREATE POLICY "Claim own email" ON participants
+    FOR UPDATE
+    USING (email IS NULL)
+    WITH CHECK (email = auth.jwt() ->> 'email');
 
 -- ============================================
 -- Расходы общего котла

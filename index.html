@@ -2040,11 +2040,35 @@
             container.innerHTML = participants.map(p => `
                 <div class="people-row">
                     <input type="text" value="${p.name}" data-person-id="${p.id}" class="person-name-input">
+                    ${p.email
+                        ? `<span style="color: var(--success); font-size: 0.85rem;" title="Почта привязана">✓ вход настроен</span>`
+                        : `<button class="btn btn-secondary btn-sm" onclick="claimParticipant('${p.id}')">Это я</button>`}
                     <button class="btn btn-secondary btn-sm" onclick="renameParticipant('${p.id}')">Сохранить</button>
                     <button class="btn btn-danger btn-sm" onclick="removeParticipant('${p.id}')">Удалить</button>
                 </div>
             `).join('');
         }
+
+        window.claimParticipant = async function(id) {
+            const person = participants.find(p => p.id === id);
+            if (!person) return;
+
+            if (!currentSession) {
+                openLoginModal();
+                return;
+            }
+
+            try {
+                await dbUpdate('participants', id, { email: currentSession.user.email });
+                person.email = currentSession.user.email;
+                saveCache();
+                renderAll();
+            } catch (err) {
+                if (err.authRequired) return;
+                console.error('Ошибка привязки email:', err);
+                alert('Не удалось привязать почту. Возможно, этого участника уже кто-то занял.');
+            }
+        };
 
         document.getElementById('person-form').addEventListener('submit', async (e) => {
             e.preventDefault();
