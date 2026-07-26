@@ -59,6 +59,19 @@
             font-size: 0.9rem;
         }
 
+        .auth-box {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+            font-size: 0.85rem;
+        }
+
+        .auth-box .auth-email {
+            color: var(--text-secondary);
+        }
+
         .card {
             background: var(--card);
             border-radius: 12px;
@@ -642,6 +655,7 @@
         <header>
             <h1>Калькулятор расходов</h1>
             <p class="subtitle">Распределяйте расходы поездки между участниками</p>
+            <div id="auth-box" class="auth-box"></div>
         </header>
 
         <div id="status-bar" class="status-bar loading">
@@ -924,6 +938,33 @@
         </div>
     </div>
 
+    <div id="auth-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content">
+            <h3>Вход</h3>
+            <p style="margin-bottom: 12px;">Чтобы вносить изменения, войдите под своим email из списка участников поездки.</p>
+
+            <form id="auth-email-form" class="form-group" style="text-align: left;">
+                <label for="auth-email-input">Email</label>
+                <input type="email" id="auth-email-input" placeholder="ваш@email.com" required>
+                <div id="auth-error" style="color: var(--danger); font-size: 0.85rem; margin-top: 6px;"></div>
+                <div class="delete-confirm-actions" style="margin-top: 16px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary" id="auth-email-submit">Отправить код</button>
+                </div>
+            </form>
+
+            <form id="auth-code-form" class="form-group hidden" style="text-align: left;">
+                <label for="auth-code-input" id="auth-code-hint">Код из письма</label>
+                <input type="text" inputmode="numeric" id="auth-code-input" placeholder="123456" required>
+                <div id="auth-code-error" style="color: var(--danger); font-size: 0.85rem; margin-top: 6px;"></div>
+                <div class="delete-confirm-actions" style="margin-top: 16px;">
+                    <button type="button" class="btn btn-secondary" onclick="closeLoginModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary" id="auth-code-submit">Войти</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="config.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -966,8 +1007,99 @@
         let timelineChart = null;
         let realtimeChannel = null;
         let refetchTimer = null;
+        let currentSession = null;
+        let pendingAuthEmail = null;
 
         const names = () => participants.map(p => p.name);
+
+        // ============================================
+        // Авторизация (email-код через Supabase Auth)
+        // ============================================
+
+        function updateAuthUI() {
+            const box = document.getElementById('auth-box');
+            if (currentSession) {
+                box.innerHTML = `<span class="auth-email">${currentSession.user.email}</span><button class="btn btn-secondary btn-sm" onclick="logout()">Выйти</button>`;
+            } else {
+                box.innerHTML = `<button class="btn btn-secondary btn-sm" onclick="openLoginModal()">Войти</button>`;
+            }
+        }
+
+        async function initAuth() {
+            const { data } = await supabase.auth.getSession();
+            currentSession = data.session;
+            updateAuthUI();
+            supabase.auth.onAuthStateChange((_event, session) => {
+                currentSession = session;
+                updateAuthUI();
+            });
+        }
+
+        window.logout = async function() {
+            await supabase.auth.signOut();
+        };
+
+        window.openLoginModal = function() {
+            document.getElementById('auth-modal').classList.remove('hidden');
+            document.getElementById('auth-email-form').classList.remove('hidden');
+            document.getElementById('auth-code-form').classList.add('hidden');
+            document.getElementById('auth-email-input').value = '';
+            document.getElementById('auth-code-input').value = '';
+            document.getElementById('auth-error').textContent = '';
+            document.getElementById('auth-code-error').textContent = '';
+        };
+
+        window.closeLoginModal = function() {
+            document.getElementById('auth-modal').classList.add('hidden');
+        };
+
+        document.getElementById('auth-email-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('auth-email-input').value.trim();
+            if (!email) return;
+            const btn = document.getElementById('auth-email-submit');
+            btn.disabled = true;
+            document.getElementById('auth-error').textContent = '';
+            try {
+                const { error } = await supabase.auth.signInWithOtp({ email });
+                if (error) throw error;
+                pendingAuthEmail = email;
+                document.getElementById('auth-email-form').classList.add('hidden');
+                document.getElementById('auth-code-form').classList.remove('hidden');
+                document.getElementById('auth-code-hint').textContent = `Код отправлен на ${email}`;
+            } catch (err) {
+                console.error('Ошибка отправки кода:', err);
+                document.getElementById('auth-error').textContent = 'Не удалось отправить код. Проверьте email.';
+            }
+            btn.disabled = false;
+        });
+
+        document.getElementById('auth-code-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const code = document.getElementById('auth-code-input').value.trim();
+            if (!code || !pendingAuthEmail) return;
+            const btn = document.getElementById('auth-code-submit');
+            btn.disabled = true;
+            document.getElementById('auth-code-error').textContent = '';
+            try {
+                const { error } = await supabase.auth.verifyOtp({ email: pendingAuthEmail, token: code, type: 'email' });
+                if (error) throw error;
+                closeLoginModal();
+            } catch (err) {
+                console.error('Ошибка проверки кода:', err);
+                document.getElementById('auth-code-error').textContent = 'Неверный или устаревший код.';
+            }
+            btn.disabled = false;
+        });
+
+        function requireAuth() {
+            if (!currentSession) {
+                openLoginModal();
+                const err = new Error('AUTH_REQUIRED');
+                err.authRequired = true;
+                throw err;
+            }
+        }
 
         // ============================================
         // Локальный кэш и очередь офлайн-изменений
@@ -1024,6 +1156,7 @@
         }
 
         async function dbInsert(table, row) {
+            requireAuth();
             if (!navigator.onLine) {
                 const local = { ...row, id: 'local-' + crypto.randomUUID() };
                 pendingQueue.push({ op: 'insert', table, row, tempId: local.id });
@@ -1036,6 +1169,7 @@
         }
 
         async function dbUpdate(table, id, patch) {
+            requireAuth();
             if (isLocalId(id)) {
                 const queued = pendingQueue.find(q => q.op === 'insert' && q.tempId === id);
                 if (queued) {
@@ -1056,6 +1190,7 @@
         }
 
         async function dbDelete(table, id) {
+            requireAuth();
             if (isLocalId(id)) {
                 pendingQueue = pendingQueue.filter(q => !(q.op === 'insert' && q.tempId === id));
                 saveQueue();
@@ -1410,6 +1545,7 @@
                 renderAll();
                 updateStatus();
             } catch (err) {
+                if (err.authRequired) return;
                 console.error('Ошибка сохранения:', err);
                 alert('Ошибка сохранения. Попробуйте ещё раз.');
             }
@@ -1474,6 +1610,7 @@
                     renderAll();
                     updateStatus();
                 } catch (err) {
+                    if (err.authRequired) return;
                     console.error('Ошибка удаления:', err);
                     alert('Не удалось удалить запись.');
                 }
@@ -1669,6 +1806,7 @@
                         renderAll();
                         updateStatus();
                     } catch (err) {
+                        if (err.authRequired) return;
                         console.error('Ошибка сохранения взаиморасчёта:', err);
                         alert('Не удалось сохранить взаиморасчёт. Убедитесь, что таблица settlements создана в Supabase.');
                     }
@@ -1706,6 +1844,7 @@
                     renderAll();
                     updateStatus();
                 } catch (err) {
+                    if (err.authRequired) return;
                     console.error('Ошибка удаления:', err);
                     alert('Не удалось удалить запись.');
                 }
@@ -1760,6 +1899,7 @@
                 renderPersonalTotals();
                 updateStatus();
             } catch (err) {
+                if (err.authRequired) return;
                 console.error('Ошибка сохранения:', err);
                 alert('Ошибка сохранения. Убедитесь, что таблица personal_expenses создана в Supabase.');
             }
@@ -1810,6 +1950,7 @@
                     renderPersonalTotals();
                     updateStatus();
                 } catch (err) {
+                    if (err.authRequired) return;
                     console.error('Ошибка удаления:', err);
                     alert('Не удалось удалить запись.');
                 }
@@ -1928,6 +2069,7 @@
                 renderAll();
                 updateStatus();
             } catch (err) {
+                if (err.authRequired) return;
                 console.error('Ошибка добавления участника:', err);
                 alert('Не удалось добавить участника. Убедитесь, что таблица participants создана в Supabase.');
             }
@@ -2000,6 +2142,7 @@
                 renderAll();
                 updateStatus();
             } catch (err) {
+                if (err.authRequired) return;
                 console.error('Ошибка переименования:', err);
                 alert('Не удалось переименовать участника.');
                 input.value = oldName;
@@ -2035,6 +2178,7 @@
                     renderAll();
                     updateStatus();
                 } catch (err) {
+                    if (err.authRequired) return;
                     console.error('Ошибка удаления участника:', err);
                     alert('Не удалось удалить участника.');
                 }
@@ -2260,6 +2404,7 @@
         }
 
         async function init() {
+            await initAuth();
             loadQueue();
             loadCache();
 

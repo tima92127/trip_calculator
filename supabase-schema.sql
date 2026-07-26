@@ -1,5 +1,55 @@
 -- Создайте таблицы в Supabase SQL Editor
 
+-- ============================================
+-- Участники поездки (редактируются из приложения)
+-- ============================================
+
+CREATE TABLE participants (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    email TEXT UNIQUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO participants (name, sort_order) VALUES
+    ('Тимур', 0),
+    ('Наташа', 1),
+    ('Андрей', 2),
+    ('Рома', 3),
+    ('Санёк', 4);
+
+-- Впишите email каждого участника, чтобы он мог входить и вносить изменения:
+-- UPDATE participants SET email = 'имя@example.com' WHERE name = 'Тимур';
+
+-- Проверяет, что текущий вход (email из JWT) принадлежит участнику поездки.
+-- SECURITY DEFINER нужен, чтобы функция могла прочитать participants в обход RLS
+-- (иначе при проверке политики на самой таблице participants возникла бы рекурсия).
+CREATE OR REPLACE FUNCTION is_trip_member()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM participants
+        WHERE email = auth.jwt() ->> 'email'
+    );
+$$;
+
+-- RLS политики: читать может кто угодно по ссылке, а добавлять/менять/удалять —
+-- только тот, кто вошёл под email, указанным здесь у одного из участников.
+ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Public read" ON participants FOR SELECT USING (true);
+CREATE POLICY "Members can insert" ON participants FOR INSERT WITH CHECK (is_trip_member());
+CREATE POLICY "Members can update" ON participants FOR UPDATE USING (is_trip_member()) WITH CHECK (is_trip_member());
+CREATE POLICY "Members can delete" ON participants FOR DELETE USING (is_trip_member());
+
+-- ============================================
+-- Расходы общего котла
+-- ============================================
+
 CREATE TABLE expenses (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     date DATE NOT NULL,
@@ -13,14 +63,12 @@ CREATE TABLE expenses (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- RLS политики (Row Level Security)
--- Для простого калькулятора поездки разрешим все операции без авторизации
 ALTER TABLE expenses ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow all operations" ON expenses
-    FOR ALL
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "Public read" ON expenses FOR SELECT USING (true);
+CREATE POLICY "Members can insert" ON expenses FOR INSERT WITH CHECK (is_trip_member());
+CREATE POLICY "Members can update" ON expenses FOR UPDATE USING (is_trip_member()) WITH CHECK (is_trip_member());
+CREATE POLICY "Members can delete" ON expenses FOR DELETE USING (is_trip_member());
 
 -- Индекс для быстрой сортировки по дате
 CREATE INDEX idx_expenses_date ON expenses(date DESC);
@@ -41,38 +89,13 @@ CREATE TABLE personal_expenses (
 
 ALTER TABLE personal_expenses ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow all operations" ON personal_expenses
-    FOR ALL
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "Public read" ON personal_expenses FOR SELECT USING (true);
+CREATE POLICY "Members can insert" ON personal_expenses FOR INSERT WITH CHECK (is_trip_member());
+CREATE POLICY "Members can update" ON personal_expenses FOR UPDATE USING (is_trip_member()) WITH CHECK (is_trip_member());
+CREATE POLICY "Members can delete" ON personal_expenses FOR DELETE USING (is_trip_member());
 
 CREATE INDEX idx_personal_expenses_person ON personal_expenses(person);
 CREATE INDEX idx_personal_expenses_date ON personal_expenses(date DESC);
-
--- ============================================
--- Участники поездки (редактируются из приложения)
--- ============================================
-
-CREATE TABLE participants (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE participants ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Allow all operations" ON participants
-    FOR ALL
-    USING (true)
-    WITH CHECK (true);
-
-INSERT INTO participants (name, sort_order) VALUES
-    ('Тимур', 0),
-    ('Наташа', 1),
-    ('Андрей', 2),
-    ('Рома', 3),
-    ('Санёк', 4);
 
 -- ============================================
 -- Взаиморасчёты: кто кому уже вернул деньги
@@ -90,10 +113,10 @@ CREATE TABLE settlements (
 
 ALTER TABLE settlements ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Allow all operations" ON settlements
-    FOR ALL
-    USING (true)
-    WITH CHECK (true);
+CREATE POLICY "Public read" ON settlements FOR SELECT USING (true);
+CREATE POLICY "Members can insert" ON settlements FOR INSERT WITH CHECK (is_trip_member());
+CREATE POLICY "Members can update" ON settlements FOR UPDATE USING (is_trip_member()) WITH CHECK (is_trip_member());
+CREATE POLICY "Members can delete" ON settlements FOR DELETE USING (is_trip_member());
 
 CREATE INDEX idx_settlements_date ON settlements(date DESC);
 
