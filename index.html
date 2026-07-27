@@ -590,30 +590,58 @@
             margin-bottom: 8px;
         }
 
-        .receipt-candidate-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 10px;
+        .receipt-item-row {
+            padding: 10px;
             background: var(--bg);
             border-radius: 8px;
-            margin-bottom: 6px;
+            margin-bottom: 8px;
         }
 
-        .receipt-candidate-row .receipt-candidate-text {
+        .receipt-item-main {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .receipt-item-desc {
             flex: 1;
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-
-        .receipt-candidate-row input {
-            width: 90px;
+            min-width: 0;
             padding: 6px 8px;
             border: 1px solid var(--border);
             border-radius: 6px;
+            font-size: 0.85rem;
+        }
+
+        .receipt-item-amount {
+            width: 90px;
+            flex-shrink: 0;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .receipt-item-participants {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .participant-check-sm {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.78rem;
+        }
+
+        .participant-check-sm input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            accent-color: var(--primary);
         }
 
         .people-row input {
@@ -954,7 +982,7 @@
     </div>
 
     <div id="receipt-modal" class="delete-confirm hidden">
-        <div class="delete-confirm-content" style="max-width: 480px; text-align: left; max-height: 85vh; overflow-y: auto;">
+        <div class="delete-confirm-content" style="max-width: 720px; text-align: left; max-height: 85vh; overflow-y: auto;">
             <h3 style="margin-bottom: 12px;">Скан чека</h3>
 
             <div id="receipt-upload-step">
@@ -972,12 +1000,29 @@
             </div>
 
             <div id="receipt-results" class="hidden">
-                <p style="color: var(--text-secondary); margin-bottom: 8px; font-size: 0.85rem;">
-                    Найденные позиции — нажмите, чтобы подставить в форму расхода (описание и сумму можно поправить перед сохранением):
+                <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.85rem;">
+                    Найденные позиции — у каждой отметьте, кто участвует в расходе. Описание,
+                    сумму и общие поля ниже можно поправить перед сохранением.
                 </p>
+
+                <div class="form-grid" style="margin-bottom: 16px;">
+                    <div class="form-group">
+                        <label for="receipt-date">Дата</label>
+                        <input type="date" id="receipt-date">
+                    </div>
+                    <div class="form-group">
+                        <label for="receipt-payer">Кто платил</label>
+                        <select id="receipt-payer"></select>
+                    </div>
+                    <div class="form-group">
+                        <label for="receipt-category">Категория</label>
+                        <select id="receipt-category"></select>
+                    </div>
+                </div>
+
                 <div id="receipt-candidates"></div>
                 <p id="receipt-no-results" class="hidden" style="color: var(--text-secondary); font-size: 0.9rem;">
-                    Суммы не распознаны. Можно ввести данные вручную.
+                    Позиции не распознаны. Можно ввести данные вручную.
                 </p>
                 <details style="margin-top: 12px;">
                     <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.85rem;">Показать весь распознанный текст</summary>
@@ -985,8 +1030,9 @@
                 </details>
             </div>
 
-            <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: flex-end;">
+            <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: space-between;">
                 <button type="button" class="btn btn-secondary" onclick="closeReceiptModal()">Закрыть</button>
+                <button type="button" class="btn btn-primary hidden" id="receipt-save-btn" onclick="saveReceiptExpenses()">Добавить расходы</button>
             </div>
         </div>
     </div>
@@ -1065,6 +1111,8 @@
             document.getElementById('receipt-upload-step').classList.remove('hidden');
             document.getElementById('receipt-progress').classList.add('hidden');
             document.getElementById('receipt-results').classList.add('hidden');
+            document.getElementById('receipt-save-btn').classList.add('hidden');
+            document.getElementById('receipt-date').value = '';
             document.getElementById('receipt-file-input').value = '';
         };
 
@@ -1174,44 +1222,118 @@
                 : extractAmountCandidatesPlain(text);
         }
 
+        function renderReceiptItems() {
+            const container = document.getElementById('receipt-candidates');
+            const noResults = document.getElementById('receipt-no-results');
+            const saveBtn = document.getElementById('receipt-save-btn');
+
+            if (receiptCandidates.length === 0) {
+                container.innerHTML = '';
+                noResults.classList.remove('hidden');
+                saveBtn.classList.add('hidden');
+                return;
+            }
+            noResults.classList.add('hidden');
+            saveBtn.classList.remove('hidden');
+
+            const participantNames = names();
+            container.innerHTML = receiptCandidates.map((c, i) => `
+                <div class="receipt-item-row">
+                    <div class="receipt-item-main">
+                        <input type="text" class="receipt-item-desc" data-index="${i}" value="${escapeHtml(c.text)}" placeholder="Описание">
+                        <input type="number" step="0.01" min="0" class="receipt-item-amount" data-index="${i}" value="${c.amount}">
+                    </div>
+                    <div class="receipt-item-participants">
+                        ${participantNames.map(p => `
+                            <label class="participant-check-sm">
+                                <input type="checkbox" class="receipt-item-participant" value="${escapeHtml(p)}" checked>
+                                <span>${escapeHtml(p)}</span>
+                            </label>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('');
+
+            updateReceiptSaveButton();
+        }
+
         function showReceiptResults(text) {
             document.getElementById('receipt-progress').classList.add('hidden');
             document.getElementById('receipt-results').classList.remove('hidden');
             document.getElementById('receipt-raw-text').textContent = text.trim() || '(пусто)';
 
             receiptCandidates = extractAmountCandidates(text);
-            const container = document.getElementById('receipt-candidates');
-            const noResults = document.getElementById('receipt-no-results');
 
-            if (receiptCandidates.length === 0) {
-                container.innerHTML = '';
-                noResults.classList.remove('hidden');
-                return;
-            }
-            noResults.classList.add('hidden');
-            container.innerHTML = receiptCandidates.map((c, i) => `
-                <div class="receipt-candidate-row">
-                    <span class="receipt-candidate-text" title="${escapeHtml(c.text)}">${escapeHtml(c.text)}</span>
-                    <input type="number" step="0.01" value="${c.amount}" data-candidate-index="${i}" class="receipt-amount-input">
-                    <button type="button" class="btn btn-primary btn-sm" onclick="useReceiptCandidate(${i})">Использовать</button>
-                </div>
-            `).join('');
+            const dateInput = document.getElementById('receipt-date');
+            if (!dateInput.value) dateInput.valueAsDate = new Date();
+
+            const payerSelect = document.getElementById('receipt-payer');
+            payerSelect.innerHTML = names().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+
+            const categorySelect = document.getElementById('receipt-category');
+            categorySelect.innerHTML = CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            if (CATEGORIES.includes('Еда')) categorySelect.value = 'Еда';
+
+            renderReceiptItems();
         }
 
-        window.useReceiptCandidate = function(index) {
-            const candidate = receiptCandidates[index];
-            const input = document.querySelector(`.receipt-amount-input[data-candidate-index="${index}"]`);
-            if (!candidate || !input) return;
+        function collectReceiptPayloads() {
+            const date = document.getElementById('receipt-date').value || new Date().toISOString().slice(0, 10);
+            const payer = document.getElementById('receipt-payer').value;
+            const category = document.getElementById('receipt-category').value;
 
-            const amount = parseFloat(input.value);
-            document.getElementById('amount').value = Number.isFinite(amount) ? amount : candidate.amount;
+            const payloads = [];
+            document.querySelectorAll('.receipt-item-row').forEach(row => {
+                const description = row.querySelector('.receipt-item-desc').value.trim();
+                const amount = parseFloat(row.querySelector('.receipt-item-amount').value);
+                const checked = Array.from(row.querySelectorAll('.receipt-item-participant:checked')).map(el => el.value);
 
-            if (!document.getElementById('description').value.trim()) {
-                document.getElementById('description').value = candidate.text;
+                if (!description || !Number.isFinite(amount) || amount <= 0 || checked.length === 0) return;
+
+                payloads.push({
+                    date,
+                    description,
+                    category,
+                    payer,
+                    amount,
+                    split_mode: 'equal',
+                    participants: checked,
+                    splits: splitEqually(amount, checked)
+                });
+            });
+            return payloads;
+        }
+
+        function updateReceiptSaveButton() {
+            const btn = document.getElementById('receipt-save-btn');
+            const count = collectReceiptPayloads().length;
+            btn.textContent = count > 0 ? `Добавить расходы (${count})` : 'Добавить расходы';
+            btn.disabled = count === 0;
+        }
+
+        document.getElementById('receipt-candidates').addEventListener('input', updateReceiptSaveButton);
+        document.getElementById('receipt-candidates').addEventListener('change', updateReceiptSaveButton);
+
+        window.saveReceiptExpenses = async function() {
+            const btn = document.getElementById('receipt-save-btn');
+            const payloads = collectReceiptPayloads();
+            if (payloads.length === 0) return;
+
+            btn.disabled = true;
+            try {
+                for (const payload of payloads) {
+                    const created = await dbInsert('expenses', payload);
+                    expenses.unshift(created);
+                }
+                saveCache();
+                renderAll();
+                updateStatus();
+                closeReceiptModal();
+            } catch (err) {
+                console.error('Ошибка сохранения расходов из чека:', err);
+                alert('Не удалось сохранить часть расходов. Попробуйте ещё раз.');
+                btn.disabled = false;
             }
-
-            closeReceiptModal();
-            document.getElementById('expense-form').scrollIntoView({ behavior: 'smooth' });
         };
 
         document.getElementById('receipt-file-input').addEventListener('change', async (e) => {
