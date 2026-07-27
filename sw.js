@@ -1,4 +1,4 @@
-const CACHE = 'trip-calc-v2';
+const CACHE = 'trip-calc-v3';
 const SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', event => {
@@ -26,19 +26,8 @@ self.addEventListener('fetch', event => {
     // Запросы к Supabase не кэшируем: офлайн-очередь в приложении сама их накапливает
     if (url.hostname.endsWith('supabase.co')) return;
 
-    // Библиотеки с CDN версионированы — берём из кэша, чтобы приложение открывалось без сети
-    if (url.hostname === 'esm.sh') {
-        event.respondWith(
-            caches.match(request).then(hit => hit || fetch(request).then(response => {
-                const copy = response.clone();
-                caches.open(CACHE).then(cache => cache.put(request, copy));
-                return response;
-            }))
-        );
-        return;
-    }
-
-    // Свои файлы: сначала сеть (чтобы правки доезжали), при её отсутствии — кэш
+    // Свои файлы (включая vendor/ — supabase-js, chart.js, tesseract.js больше не
+    // грузятся с CDN): сначала сеть (чтобы правки доезжали), при её отсутствии — кэш
     event.respondWith(
         fetch(request)
             .then(response => {

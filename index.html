@@ -1177,11 +1177,15 @@
     <script src="config.js"></script>
     <script src="vendor/supabase.js"></script>
     <script src="vendor/chart.js"></script>
+    <script src="vendor/tesseract.js"></script>
     <script type="module">
-        // supabase-js и chart.js — локальные копии (vendor/), а не esm.sh: в некоторых
-        // регионах Cloudflare (на котором работает esm.sh) недоступен без VPN, а GitHub
-        // Pages и Supabase — доступны. Раньше это ломало приложение целиком, так как
-        // скрипт с этим импортом не выполнялся вовсе, если esm.sh не отвечал.
+        // supabase-js, chart.js и tesseract.js — локальные копии (vendor/), а не esm.sh
+        // или jsdelivr: в некоторых регионах Cloudflare (на котором работает esm.sh)
+        // недоступен без VPN, а GitHub Pages и Supabase — доступны. Раньше это ломало
+        // приложение целиком, так как скрипт с этим импортом не выполнялся вовсе, если
+        // esm.sh не отвечал. Локальное распознавание чеков зависело от той же esm.sh —
+        // при недоступном OCR.space (см. recognizeReceiptCloud) резервный путь тоже
+        // не работал.
         const { createClient } = window.supabase;
         const Chart = window.Chart;
 
@@ -1202,10 +1206,15 @@
 
         function getTesseractWorker() {
             if (!tesseractWorkerPromise) {
-                tesseractWorkerPromise = (async () => {
-                    const { createWorker } = await import('https://esm.sh/tesseract.js@5');
-                    return createWorker('rus+eng');
-                })();
+                // Файлы движка (воркер, WASM-ядро, языковые данные) лежат локально в
+                // vendor/tesseract/ — без этого используются CDN-пути по умолчанию
+                // (esm.sh/jsdelivr), которые недоступны без VPN в тех же регионах,
+                // что и облачный OCR.
+                tesseractWorkerPromise = window.Tesseract.createWorker('rus+eng', undefined, {
+                    workerPath: 'vendor/tesseract/worker.min.js',
+                    corePath: 'vendor/tesseract/tesseract-core-simd-lstm.wasm.js',
+                    langPath: 'vendor/tesseract',
+                });
             }
             return tesseractWorkerPromise;
         }
