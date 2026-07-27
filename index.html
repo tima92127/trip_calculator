@@ -1237,9 +1237,13 @@
             formData.append('isTable', 'true');
             formData.append('isOverlayRequired', 'false');
 
+            // Таймаут, чтобы при недоступности OCR.space (например, сервис заблокирован
+            // в регионе и соединение просто зависает) быстро откатиться на локальное
+            // распознавание, а не "морозить" интерфейс на неопределённое время.
             const response = await fetch('https://api.ocr.space/parse/image', {
                 method: 'POST',
                 body: formData,
+                signal: AbortSignal.timeout(12000),
             });
             if (!response.ok) throw new Error(`ocr-space-http-${response.status}`);
 
