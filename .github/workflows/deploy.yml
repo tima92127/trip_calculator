@@ -28,6 +28,7 @@ jobs:
           cat > config.js <<EOF
           window.SUPABASE_URL = '${{ secrets.SUPABASE_URL }}';
           window.SUPABASE_ANON_KEY = '${{ secrets.SUPABASE_ANON_KEY }}';
+          window.OCR_SPACE_API_KEY = '${{ secrets.OCR_SPACE_API_KEY }}';
           EOF
 
       - name: Настроить Pages
