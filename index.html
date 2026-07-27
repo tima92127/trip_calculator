@@ -987,11 +987,16 @@
 
             <div id="receipt-upload-step">
                 <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
-                    Сфотографируйте чек или выберите фото. Экспериментальная функция —
-                    распознавание может ошибаться, особенно на мятых термочеках.
-                    Проверяйте суммы перед сохранением.
+                    Сфотографируйте чек или выберите уже готовое фото из галереи.
+                    Экспериментальная функция — распознавание может ошибаться,
+                    особенно на мятых термочеках. Проверяйте суммы перед сохранением.
                 </p>
-                <input type="file" id="receipt-file-input" accept="image/*">
+                <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('receipt-camera-input').click()">📷 Сделать фото</button>
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('receipt-gallery-input').click()">🖼️ Из галереи</button>
+                </div>
+                <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" class="hidden">
+                <input type="file" id="receipt-gallery-input" accept="image/*" class="hidden">
             </div>
 
             <div id="receipt-progress" class="hidden" style="text-align: center; padding: 20px 0;">
@@ -1113,7 +1118,8 @@
             document.getElementById('receipt-results').classList.add('hidden');
             document.getElementById('receipt-save-btn').classList.add('hidden');
             document.getElementById('receipt-date').value = '';
-            document.getElementById('receipt-file-input').value = '';
+            document.getElementById('receipt-camera-input').value = '';
+            document.getElementById('receipt-gallery-input').value = '';
         };
 
         window.closeReceiptModal = function() {
@@ -1336,8 +1342,7 @@
             }
         };
 
-        document.getElementById('receipt-file-input').addEventListener('change', async (e) => {
-            const file = e.target.files[0];
+        async function handleReceiptFile(file) {
             if (!file) return;
 
             document.getElementById('receipt-upload-step').classList.add('hidden');
@@ -1371,7 +1376,10 @@
                 document.getElementById('receipt-upload-step').classList.remove('hidden');
                 alert('Не удалось распознать чек. Попробуйте другое фото или введите данные вручную.');
             }
-        });
+        }
+
+        document.getElementById('receipt-camera-input').addEventListener('change', (e) => handleReceiptFile(e.target.files[0]));
+        document.getElementById('receipt-gallery-input').addEventListener('change', (e) => handleReceiptFile(e.target.files[0]));
 
         // ============================================
         // НАСТРОЙКИ - берутся из config.js (см. config.example.js)
