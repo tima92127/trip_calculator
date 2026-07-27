@@ -98,6 +98,26 @@ CREATE POLICY "Allow all operations" ON settlements
 CREATE INDEX idx_settlements_date ON settlements(date DESC);
 
 -- ============================================
+-- Фото чека: прикладывается к расходам, созданным через "Скан чека"
+-- ============================================
+
+alter table expenses add column if not exists receipt_photos text[];
+
+insert into storage.buckets (id, name, public)
+values ('receipts', 'receipts', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Public read access on receipts" on storage.objects;
+create policy "Public read access on receipts"
+on storage.objects for select
+using (bucket_id = 'receipts');
+
+drop policy if exists "Anon can upload receipts" on storage.objects;
+create policy "Anon can upload receipts"
+on storage.objects for insert
+with check (bucket_id = 'receipts');
+
+-- ============================================
 -- Realtime: мгновенные обновления у всех участников
 -- (входит в бесплатный тариф Supabase)
 -- ============================================

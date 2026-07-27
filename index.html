@@ -644,6 +644,42 @@
             accent-color: var(--primary);
         }
 
+        #receipt-photos-strip {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .receipt-photo-thumb {
+            position: relative;
+            width: 64px;
+            height: 64px;
+        }
+
+        .receipt-photo-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .receipt-photo-remove {
+            position: absolute;
+            top: -6px;
+            right: -6px;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: var(--danger);
+            color: white;
+            border: none;
+            font-size: 0.7rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
         .people-row input {
             flex: 1;
             padding: 8px 10px;
@@ -988,8 +1024,11 @@
             <div id="receipt-upload-step">
                 <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
                     Сфотографируйте чек или выберите уже готовое фото из галереи.
-                    Экспериментальная функция — распознавание может ошибаться,
-                    особенно на мятых термочеках. Проверяйте суммы перед сохранением.
+                    Если чек длинный и не помещается в кадр целиком — сфотографируйте
+                    по частям, можно добавить несколько фото подряд, позиции соберутся
+                    в один общий список. Распознавание экспериментальное и может
+                    ошибаться, особенно на мятых термочеках. Проверяйте суммы перед
+                    сохранением.
                 </p>
                 <div style="display: flex; gap: 8px; flex-wrap: wrap;">
                     <button type="button" class="btn btn-secondary" onclick="document.getElementById('receipt-camera-input').click()">📷 Сделать фото</button>
@@ -998,6 +1037,8 @@
                 <input type="file" id="receipt-camera-input" accept="image/*" capture="environment" class="hidden">
                 <input type="file" id="receipt-gallery-input" accept="image/*" class="hidden">
             </div>
+
+            <div id="receipt-photos-strip" class="hidden"></div>
 
             <div id="receipt-progress" class="hidden" style="text-align: center; padding: 20px 0;">
                 <div class="spinner" style="width: 28px; height: 28px; margin: 0 auto 12px; color: var(--primary);"></div>
@@ -1052,6 +1093,16 @@
         </div>
     </div>
 
+    <div id="receipt-photos-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content" style="max-width: 640px; text-align: left; max-height: 85vh; overflow-y: auto;">
+            <h3 style="margin-bottom: 12px;">Фото чека</h3>
+            <div id="receipt-photos-viewer" style="display: flex; flex-direction: column; gap: 12px;"></div>
+            <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeReceiptPhotosViewer()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
     <script src="config.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -1063,6 +1114,8 @@
 
         let tesseractWorkerPromise = null;
         let receiptCandidates = [];
+        let receiptSessionPhotos = [];   // [{ id, blob, previewUrl }] — все фото текущего сеанса скана
+        let receiptSessionRawTexts = []; // распознанный текст каждого фото, для debug-блока
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -1094,11 +1147,10 @@
             });
         }
 
-        async function recognizeReceiptCloud(file) {
+        async function recognizeReceiptCloud(blob) {
             const apiKey = window.OCR_SPACE_API_KEY;
             if (!apiKey) throw new Error('no-ocr-api-key');
 
-            const blob = await resizeImageForOcr(file);
             const formData = new FormData();
             formData.append('apikey', apiKey);
             formData.append('file', blob, 'receipt.jpg');
@@ -1121,19 +1173,39 @@
             return (data.ParsedResults || []).map(r => r.ParsedText).join('\n');
         }
 
+        function resetReceiptSession() {
+            receiptSessionPhotos.forEach(p => URL.revokeObjectURL(p.previewUrl));
+            receiptSessionPhotos = [];
+            receiptSessionRawTexts = [];
+            receiptCandidates = [];
+        }
+
         window.openReceiptModal = function() {
+            resetReceiptSession();
+
             document.getElementById('receipt-modal').classList.remove('hidden');
             document.getElementById('receipt-upload-step').classList.remove('hidden');
             document.getElementById('receipt-progress').classList.add('hidden');
             document.getElementById('receipt-results').classList.add('hidden');
             document.getElementById('receipt-save-btn').classList.add('hidden');
-            document.getElementById('receipt-date').value = '';
             document.getElementById('receipt-camera-input').value = '';
             document.getElementById('receipt-gallery-input').value = '';
+            renderReceiptPhotoThumbnails();
+
+            document.getElementById('receipt-date').valueAsDate = new Date();
+
+            const payerSelect = document.getElementById('receipt-payer');
+            payerSelect.innerHTML = names().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
+
+            const categorySelect = document.getElementById('receipt-category');
+            categorySelect.innerHTML = CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            if (CATEGORIES.includes('Еда')) categorySelect.value = 'Еда';
         };
 
         window.closeReceiptModal = function() {
             document.getElementById('receipt-modal').classList.add('hidden');
+            resetReceiptSession();
+            renderReceiptPhotoThumbnails();
         };
 
         // Строка чека вида "... 150.00" — сумма в конце строки (не обязательно вся строка).
@@ -1273,23 +1345,49 @@
             updateReceiptSaveButton();
         }
 
-        function showReceiptResults(text) {
-            document.getElementById('receipt-progress').classList.add('hidden');
+        function renderReceiptPhotoThumbnails() {
+            const strip = document.getElementById('receipt-photos-strip');
+            if (receiptSessionPhotos.length === 0) {
+                strip.classList.add('hidden');
+                strip.innerHTML = '';
+                return;
+            }
+            strip.classList.remove('hidden');
+            strip.innerHTML = receiptSessionPhotos.map((p, i) => `
+                <div class="receipt-photo-thumb">
+                    <img src="${p.previewUrl}" alt="Фото ${i + 1}">
+                    <button type="button" class="receipt-photo-remove" onclick="removeReceiptPhoto('${p.id}')" title="Убрать это фото">✕</button>
+                </div>
+            `).join('');
+        }
+
+        window.removeReceiptPhoto = function(photoId) {
+            const idx = receiptSessionPhotos.findIndex(p => p.id === photoId);
+            if (idx === -1) return;
+
+            URL.revokeObjectURL(receiptSessionPhotos[idx].previewUrl);
+            receiptSessionPhotos.splice(idx, 1);
+            receiptCandidates = receiptCandidates.filter(c => c.photoId !== photoId);
+
+            renderReceiptPhotoThumbnails();
+            renderReceiptItems();
+            if (receiptSessionPhotos.length === 0) {
+                document.getElementById('receipt-results').classList.add('hidden');
+            }
+        };
+
+        function addReceiptPhotoToSession(blob, text) {
+            const photoId = crypto.randomUUID();
+            receiptSessionPhotos.push({ id: photoId, blob, previewUrl: URL.createObjectURL(blob) });
+
+            const newItems = extractAmountCandidates(text).map(c => ({ ...c, photoId }));
+            receiptCandidates = receiptCandidates.concat(newItems);
+
+            receiptSessionRawTexts.push(text.trim() || '(пусто)');
+            document.getElementById('receipt-raw-text').textContent = receiptSessionRawTexts.join('\n\n--- следующее фото ---\n\n');
+
             document.getElementById('receipt-results').classList.remove('hidden');
-            document.getElementById('receipt-raw-text').textContent = text.trim() || '(пусто)';
-
-            receiptCandidates = extractAmountCandidates(text);
-
-            const dateInput = document.getElementById('receipt-date');
-            if (!dateInput.value) dateInput.valueAsDate = new Date();
-
-            const payerSelect = document.getElementById('receipt-payer');
-            payerSelect.innerHTML = names().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
-
-            const categorySelect = document.getElementById('receipt-category');
-            categorySelect.innerHTML = CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-            if (CATEGORIES.includes('Еда')) categorySelect.value = 'Еда';
-
+            renderReceiptPhotoThumbnails();
             renderReceiptItems();
         }
 
@@ -1330,14 +1428,45 @@
         document.getElementById('receipt-candidates').addEventListener('input', updateReceiptSaveButton);
         document.getElementById('receipt-candidates').addEventListener('change', updateReceiptSaveButton);
 
+        async function uploadReceiptPhotos() {
+            const urls = [];
+            for (const photo of receiptSessionPhotos) {
+                const path = `${crypto.randomUUID()}.jpg`;
+                const { error } = await supabase.storage.from('receipts').upload(path, photo.blob, {
+                    contentType: 'image/jpeg',
+                    upsert: false
+                });
+                if (error) throw error;
+                const { data } = supabase.storage.from('receipts').getPublicUrl(path);
+                urls.push(data.publicUrl);
+            }
+            return urls;
+        }
+
         window.saveReceiptExpenses = async function() {
             const btn = document.getElementById('receipt-save-btn');
             const payloads = collectReceiptPayloads();
             if (payloads.length === 0) return;
 
             btn.disabled = true;
+            const originalBtnText = btn.textContent;
+
+            let photoUrls = [];
+            let photoUploadFailed = false;
+            if (navigator.onLine && receiptSessionPhotos.length > 0) {
+                btn.textContent = 'Загружаем фото чека...';
+                try {
+                    photoUrls = await uploadReceiptPhotos();
+                } catch (uploadErr) {
+                    console.error('Не удалось загрузить фото чека:', uploadErr);
+                    photoUploadFailed = true;
+                }
+            }
+
+            btn.textContent = 'Сохраняем...';
             try {
                 for (const payload of payloads) {
+                    if (photoUrls.length > 0) payload.receipt_photos = photoUrls;
                     const created = await dbInsert('expenses', payload);
                     expenses.unshift(created);
                 }
@@ -1345,10 +1474,14 @@
                 renderAll();
                 updateStatus();
                 closeReceiptModal();
+                if (photoUploadFailed) {
+                    alert('Расходы сохранены. Фото чека загрузить не удалось — проверьте соединение.');
+                }
             } catch (err) {
                 console.error('Ошибка сохранения расходов из чека:', err);
                 alert('Не удалось сохранить часть расходов. Попробуйте ещё раз.');
                 btn.disabled = false;
+                btn.textContent = originalBtnText;
             }
         };
 
@@ -1359,12 +1492,13 @@
             document.getElementById('receipt-progress').classList.remove('hidden');
 
             try {
+                const photoBlob = await resizeImageForOcr(file);
                 let text = null;
 
                 if (window.OCR_SPACE_API_KEY && navigator.onLine) {
                     try {
                         document.getElementById('receipt-progress-text').textContent = 'Распознаём текст (облачный сервис)...';
-                        text = await recognizeReceiptCloud(file);
+                        text = await recognizeReceiptCloud(photoBlob);
                     } catch (cloudErr) {
                         console.warn('Облачное распознавание не удалось, переключаемся на локальное:', cloudErr);
                         text = null;
@@ -1375,16 +1509,19 @@
                     document.getElementById('receipt-progress-text').textContent = 'Загружаем модуль распознавания (это может занять время при первом запуске)...';
                     const worker = await getTesseractWorker();
                     document.getElementById('receipt-progress-text').textContent = 'Распознаём текст локально...';
-                    const result = await worker.recognize(file);
+                    const result = await worker.recognize(photoBlob);
                     text = result.data.text;
                 }
 
-                showReceiptResults(text);
+                addReceiptPhotoToSession(photoBlob, text);
             } catch (err) {
                 console.error('Ошибка распознавания чека:', err);
+                alert('Не удалось распознать чек. Попробуйте другое фото или введите данные вручную.');
+            } finally {
                 document.getElementById('receipt-progress').classList.add('hidden');
                 document.getElementById('receipt-upload-step').classList.remove('hidden');
-                alert('Не удалось распознать чек. Попробуйте другое фото или введите данные вручную.');
+                document.getElementById('receipt-camera-input').value = '';
+                document.getElementById('receipt-gallery-input').value = '';
             }
         }
 
@@ -2039,6 +2176,7 @@
                     <td>${exp.split_mode === 'equal' ? 'Поровну' : 'Вручную'}</td>
                     <td>
                         <div class="actions-cell">
+                            ${receiptPhotosButton(exp.receipt_photos)}
                             <button class="btn btn-secondary btn-sm" onclick="editExpense('${exp.id}')">Изм.</button>
                             <button class="btn btn-danger btn-sm" onclick="deleteExpense('${exp.id}')">Уд.</button>
                         </div>
@@ -2170,13 +2308,13 @@
 
             const paidRows = paidExpenses.map(e => row(
                 e.date,
-                `${escapeHtml(e.description)} <span style="color: var(--text-secondary);">(${escapeHtml(e.category)})</span>`,
+                `${escapeHtml(e.description)} <span style="color: var(--text-secondary);">(${escapeHtml(e.category)})</span> ${receiptPhotosButton(e.receipt_photos)}`,
                 e.amount
             )).join('') || emptyRow;
 
             const spentRows = spentExpenses.map(e => row(
                 e.date,
-                `${escapeHtml(e.description)} <span style="color: var(--text-secondary);">(оплатил(а) ${escapeHtml(e.payer)})</span>`,
+                `${escapeHtml(e.description)} <span style="color: var(--text-secondary);">(оплатил(а) ${escapeHtml(e.payer)})</span> ${receiptPhotosButton(e.receipt_photos)}`,
                 e.splits[name]
             )).join('') || emptyRow;
 
@@ -2215,6 +2353,24 @@
         window.closeBalanceBreakdown = function() {
             document.getElementById('balance-breakdown-modal').classList.add('hidden');
         };
+
+        window.viewReceiptPhotos = function(urlsJsonEnc) {
+            const urls = JSON.parse(decodeURIComponent(urlsJsonEnc));
+            document.getElementById('receipt-photos-viewer').innerHTML = urls.map(u => `
+                <img src="${u}" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);">
+            `).join('');
+            document.getElementById('receipt-photos-modal').classList.remove('hidden');
+        };
+
+        window.closeReceiptPhotosViewer = function() {
+            document.getElementById('receipt-photos-modal').classList.add('hidden');
+        };
+
+        function receiptPhotosButton(photos) {
+            if (!photos || photos.length === 0) return '';
+            const urlsEnc = encodeURIComponent(JSON.stringify(photos));
+            return `<button type="button" class="btn btn-secondary btn-sm" onclick="viewReceiptPhotos('${urlsEnc}')" title="Показать фото чека">🧾</button>`;
+        }
 
         function renderSettlements() {
             const container = document.getElementById('settlements-list');
