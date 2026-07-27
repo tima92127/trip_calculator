@@ -963,7 +963,7 @@
                     распознавание может ошибаться, особенно на мятых термочеках.
                     Проверяйте суммы перед сохранением.
                 </p>
-                <input type="file" id="receipt-file-input" accept="image/*" capture="environment">
+                <input type="file" id="receipt-file-input" accept="image/*">
             </div>
 
             <div id="receipt-progress" class="hidden" style="text-align: center; padding: 20px 0;">
@@ -973,7 +973,7 @@
 
             <div id="receipt-results" class="hidden">
                 <p style="color: var(--text-secondary); margin-bottom: 8px; font-size: 0.85rem;">
-                    Найденные суммы — нажмите, чтобы подставить в форму расхода (описание и сумму можно поправить перед сохранением):
+                    Найденные позиции — нажмите, чтобы подставить в форму расхода (описание и сумму можно поправить перед сохранением):
                 </p>
                 <div id="receipt-candidates"></div>
                 <p id="receipt-no-results" class="hidden" style="color: var(--text-secondary); font-size: 0.9rem;">
@@ -1044,6 +1044,8 @@
             formData.append('language', 'rus');
             formData.append('OCREngine', '2');
             formData.append('scale', 'true');
+            formData.append('isTable', 'true');
+            formData.append('isOverlayRequired', 'false');
 
             const response = await fetch('https://api.ocr.space/parse/image', {
                 method: 'POST',
@@ -1070,18 +1072,106 @@
             document.getElementById('receipt-modal').classList.add('hidden');
         };
 
-        function extractAmountCandidates(text) {
+        // Строка чека вида "... 150.00" — сумма в конце строки (не обязательно вся строка).
+        const TRAILING_AMOUNT_RE = /(\d[\d ]*)[.,](\d{2})\s*(?:₽|руб\.?|р\.?)?\s*$/i;
+
+        function parseAmountMatch(m) {
+            const value = parseFloat(`${m[1].replace(/\s/g, '')}.${m[2]}`);
+            return Number.isFinite(value) && value > 0 && value <= 1000000 ? value : null;
+        }
+
+        function parseAmountFromString(str) {
+            const m = str.trim().match(TRAILING_AMOUNT_RE);
+            return m ? parseAmountMatch(m) : null;
+        }
+
+        // Короткие обрывки вроде "1шт." (а после распознавания — "1ШT.", "10T.")
+        // не годятся в название позиции: считаем текст содержательным по числу букв.
+        function isMeaningfulText(str) {
+            return (str.match(/[a-zA-Zа-яА-ЯёЁ]/g) || []).length >= 3;
+        }
+
+        function dedupeCandidates(results) {
+            return results.filter((c, i) => {
+                const prev = results[i - 1];
+                return !prev || prev.text !== c.text || prev.amount !== c.amount;
+            });
+        }
+
+        // Табличный режим OCR.space (isTable=true) отдаёт строки чека, где ячейки
+        // одной позиции разделены табуляцией: название и колонки цена/скидка/кол-во/итог.
+        // Последняя непустая ячейка строки обычно и есть итоговая сумма по позиции.
+        function extractAmountCandidatesTable(text) {
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-            const amountRe = /(\d[\d ]*)[.,](\d{2})\s*(?:₽|руб\.?|р\.?)?\s*$/i;
             const results = [];
+            let contextDesc = '';
+
             for (const line of lines) {
-                const m = line.match(amountRe);
-                if (!m) continue;
-                const value = parseFloat(`${m[1].replace(/\s/g, '')}.${m[2]}`);
-                if (!Number.isFinite(value) || value <= 0 || value > 1000000) continue;
-                results.push({ text: line, amount: value });
+                const cells = line.split('\t').map(c => c.trim()).filter(Boolean);
+                if (cells.length === 0) continue;
+
+                const lastCell = cells[cells.length - 1];
+                const amount = parseAmountFromString(lastCell);
+
+                if (amount === null) {
+                    const letters = cells.filter(isMeaningfulText).join(' ');
+                    if (letters) contextDesc = letters;
+                    continue;
+                }
+
+                const descCells = cells.slice(0, -1).filter(isMeaningfulText).join(' ');
+                if (descCells) contextDesc = descCells;
+
+                results.push({ text: contextDesc || lastCell, amount });
             }
-            return results;
+            return dedupeCandidates(results);
+        }
+
+        // Обычный текст (локальный Tesseract или облако без табличной разметки):
+        // позиция и сумма либо на одной строке ("Кофе  150.00"), либо сумма идёт
+        // отдельной строкой после названия — берём последнюю сумму перед следующей позицией.
+        function extractAmountCandidatesPlain(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            const results = [];
+            let currentDesc = null;
+            let lastAmount = null;
+
+            const flush = () => {
+                if (currentDesc && lastAmount != null) {
+                    results.push({ text: currentDesc, amount: lastAmount });
+                }
+                currentDesc = null;
+                lastAmount = null;
+            };
+
+            for (const line of lines) {
+                const m = line.match(TRAILING_AMOUNT_RE);
+                if (m) {
+                    const amount = parseAmountMatch(m);
+                    if (amount === null) continue;
+                    const prefix = line.slice(0, m.index).trim();
+                    if (prefix && isMeaningfulText(prefix)) {
+                        flush();
+                        results.push({ text: prefix, amount });
+                    } else {
+                        lastAmount = amount;
+                    }
+                    continue;
+                }
+
+                if (!isMeaningfulText(line)) continue; // мусор/маркеры кол-ва — не сбрасываем контекст
+
+                flush();
+                currentDesc = line;
+            }
+            flush();
+            return dedupeCandidates(results);
+        }
+
+        function extractAmountCandidates(text) {
+            return text.includes('\t')
+                ? extractAmountCandidatesTable(text)
+                : extractAmountCandidatesPlain(text);
         }
 
         function showReceiptResults(text) {
@@ -1117,8 +1207,7 @@
             document.getElementById('amount').value = Number.isFinite(amount) ? amount : candidate.amount;
 
             if (!document.getElementById('description').value.trim()) {
-                const cleaned = candidate.text.replace(/[\d\s.,₽рруб]+$/i, '').trim();
-                document.getElementById('description').value = cleaned || candidate.text;
+                document.getElementById('description').value = candidate.text;
             }
 
             closeReceiptModal();
