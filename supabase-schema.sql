@@ -75,6 +75,31 @@ INSERT INTO participants (name, sort_order) VALUES
     ('Санёк', 4);
 
 -- ============================================
+-- Категории расходов (редактируются из приложения)
+-- ============================================
+
+CREATE TABLE categories (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE categories ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Allow all operations" ON categories
+    FOR ALL
+    USING (true)
+    WITH CHECK (true);
+
+INSERT INTO categories (name, sort_order) VALUES
+    ('Жильё', 0),
+    ('Транспорт', 1),
+    ('Еда', 2),
+    ('Развлечения', 3),
+    ('Прочее', 4);
+
+-- ============================================
 -- Взаиморасчёты: кто кому уже вернул деньги
 -- ============================================
 
@@ -126,3 +151,4 @@ ALTER PUBLICATION supabase_realtime ADD TABLE expenses;
 ALTER PUBLICATION supabase_realtime ADD TABLE personal_expenses;
 ALTER PUBLICATION supabase_realtime ADD TABLE participants;
 ALTER PUBLICATION supabase_realtime ADD TABLE settlements;
+ALTER PUBLICATION supabase_realtime ADD TABLE categories;

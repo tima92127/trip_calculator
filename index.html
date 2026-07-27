@@ -695,6 +695,45 @@
             margin-top: 12px;
         }
 
+        .receipts-gallery {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .receipt-gallery-card {
+            cursor: pointer;
+            background: var(--bg);
+            border-radius: 8px;
+            overflow: hidden;
+            transition: background 0.2s;
+        }
+
+        .receipt-gallery-card:hover {
+            background: #e5e7eb;
+        }
+
+        .receipt-gallery-card img {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            display: block;
+        }
+
+        .receipt-gallery-info {
+            padding: 8px 10px;
+            font-size: 0.82rem;
+        }
+
+        .receipt-gallery-info .amount {
+            font-weight: 600;
+            margin: 2px 0;
+        }
+
+        .receipt-gallery-count {
+            color: var(--text-secondary);
+        }
+
         @media (max-width: 640px) {
             .container {
                 padding: 12px;
@@ -744,7 +783,8 @@
             <button class="tab" onclick="showTab('summary')">Итоги</button>
             <button class="tab" onclick="showTab('dashboard')">Дашборд</button>
             <button class="tab" onclick="showTab('personal')">Личное</button>
-            <button class="tab" onclick="showTab('people')">Люди</button>
+            <button class="tab" onclick="showTab('people')">Настройки</button>
+            <button class="tab" onclick="showTab('receipts')">Чеки</button>
         </div>
 
         <div id="expenses-tab">
@@ -1003,6 +1043,37 @@
                     </div>
                 </form>
             </div>
+
+            <div class="card">
+                <div class="card-title">Категории расходов</div>
+                <div id="categories-list"></div>
+                <p class="hint">При переименовании категория автоматически переименуется во всех расходах и личных тратах. Удалить можно только категорию, которая нигде не используется.</p>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Добавить категорию</div>
+                <form id="category-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="new-category-name">Название</label>
+                            <input type="text" id="new-category-name" placeholder="Например: Здоровье" required>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="category-submit-btn">Добавить</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <div id="receipts-tab" class="hidden">
+            <div class="card">
+                <div class="card-title">Отсканированные чеки</div>
+                <div id="receipts-gallery" class="receipts-gallery"></div>
+                <div id="receipts-empty" class="empty-state hidden">
+                    <p>Пока нет отсканированных чеков.</p>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -1198,8 +1269,8 @@
             payerSelect.innerHTML = names().map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
 
             const categorySelect = document.getElementById('receipt-category');
-            categorySelect.innerHTML = CATEGORIES.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-            if (CATEGORIES.includes('Еда')) categorySelect.value = 'Еда';
+            categorySelect.innerHTML = categoryNames().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            if (categoryNames().includes('Еда')) categorySelect.value = 'Еда';
         };
 
         window.closeReceiptModal = function() {
@@ -1538,13 +1609,14 @@
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
         const DEFAULT_PARTICIPANTS = ['Тимур', 'Наташа', 'Андрей', 'Рома', 'Санёк'];
-        const CATEGORIES = ['Жильё', 'Транспорт', 'Еда', 'Развлечения', 'Прочее'];
+        const DEFAULT_CATEGORIES = ['Жильё', 'Транспорт', 'Еда', 'Развлечения', 'Прочее'];
         const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
-        const TABS = ['expenses', 'summary', 'dashboard', 'personal', 'people'];
+        const TABS = ['expenses', 'summary', 'dashboard', 'personal', 'people', 'receipts'];
         const CACHE_KEY = 'trip-calc-cache-v1';
         const QUEUE_KEY = 'trip-calc-queue-v1';
 
         let participants = [];
+        let categories = [];
         let expenses = [];
         let personalExpenses = [];
         let settlements = [];
@@ -1567,6 +1639,7 @@
         let refetchTimer = null;
 
         const names = () => participants.map(p => p.name);
+        const categoryNames = () => categories.map(c => c.name);
 
         // ============================================
         // Локальный кэш и очередь офлайн-изменений
@@ -1578,6 +1651,7 @@
                 if (!raw) return;
                 const cache = JSON.parse(raw);
                 participants = cache.participants || [];
+                categories = cache.categories || [];
                 expenses = cache.expenses || [];
                 personalExpenses = cache.personalExpenses || [];
                 settlements = cache.settlements || [];
@@ -1588,7 +1662,7 @@
 
         function saveCache() {
             try {
-                localStorage.setItem(CACHE_KEY, JSON.stringify({ participants, expenses, personalExpenses, settlements }));
+                localStorage.setItem(CACHE_KEY, JSON.stringify({ participants, categories, expenses, personalExpenses, settlements }));
             } catch (err) {
                 console.warn('Не удалось сохранить кэш:', err);
             }
@@ -1618,6 +1692,7 @@
             if (table === 'expenses') return expenses;
             if (table === 'personal_expenses') return personalExpenses;
             if (table === 'participants') return participants;
+            if (table === 'categories') return categories;
             if (table === 'settlements') return settlements;
             return [];
         }
@@ -1710,8 +1785,9 @@
         // ============================================
 
         async function fetchAll() {
-            const [p, e, pe, s] = await Promise.all([
+            const [p, c, e, pe, s] = await Promise.all([
                 supabase.from('participants').select('*').order('sort_order', { ascending: true }),
+                supabase.from('categories').select('*').order('sort_order', { ascending: true }),
                 supabase.from('expenses').select('*').order('date', { ascending: false }),
                 supabase.from('personal_expenses').select('*').order('date', { ascending: false }),
                 supabase.from('settlements').select('*').order('date', { ascending: false })
@@ -1724,6 +1800,12 @@
                 participants = p.data;
             } else if (participants.length === 0) {
                 participants = DEFAULT_PARTICIPANTS.map((name, i) => ({ id: 'default-' + i, name, sort_order: i }));
+            }
+
+            if (!c.error && (c.data || []).length > 0) {
+                categories = c.data;
+            } else if (categories.length === 0) {
+                categories = DEFAULT_CATEGORIES.map((name, i) => ({ id: 'default-cat-' + i, name, sort_order: i }));
             }
 
             if (!pe.error) personalExpenses = pe.data || [];
@@ -1890,21 +1972,22 @@
         }
 
         function renderCategoryOptions() {
-            const options = CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('');
+            const list = categoryNames();
+            const options = list.map(c => `<option value="${c}">${c}</option>`).join('');
             const category = document.getElementById('category');
             const prev = category.value;
             category.innerHTML = options;
-            if (CATEGORIES.includes(prev)) category.value = prev;
+            if (list.includes(prev)) category.value = prev;
 
             const personalCategory = document.getElementById('personal-category');
             const prevPersonal = personalCategory.value;
             personalCategory.innerHTML = options;
-            if (CATEGORIES.includes(prevPersonal)) personalCategory.value = prevPersonal;
+            if (list.includes(prevPersonal)) personalCategory.value = prevPersonal;
 
             const filterCategory = document.getElementById('filter-category');
             const prevFilter = filterCategory.value;
             filterCategory.innerHTML = '<option value="">Все</option>' + options;
-            filterCategory.value = CATEGORIES.includes(prevFilter) ? prevFilter : '';
+            filterCategory.value = list.includes(prevFilter) ? prevFilter : '';
         }
 
         window.setSplitMode = function(mode) {
@@ -2372,6 +2455,50 @@
             return `<button type="button" class="btn btn-secondary btn-sm" onclick="viewReceiptPhotos('${urlsEnc}')" title="Показать фото чека">🧾</button>`;
         }
 
+        // Расходы из одного скана чека делят один и тот же массив receipt_photos —
+        // группируем по его содержимому, чтобы показать один чек, а не N карточек.
+        function renderReceiptGallery() {
+            const groups = new Map();
+
+            expenses.forEach(exp => {
+                if (!exp.receipt_photos || exp.receipt_photos.length === 0) return;
+                const key = JSON.stringify(exp.receipt_photos);
+                if (!groups.has(key)) {
+                    groups.set(key, { photos: exp.receipt_photos, date: exp.date, items: [] });
+                }
+                const group = groups.get(key);
+                group.items.push(exp);
+                if (exp.date < group.date) group.date = exp.date;
+            });
+
+            const container = document.getElementById('receipts-gallery');
+            const emptyState = document.getElementById('receipts-empty');
+            const list = Array.from(groups.values()).sort((a, b) => b.date.localeCompare(a.date));
+
+            if (list.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            emptyState.classList.add('hidden');
+
+            container.innerHTML = list.map(g => {
+                const total = g.items.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                const urlsEnc = encodeURIComponent(JSON.stringify(g.photos));
+                const photoCount = g.photos.length > 1 ? `, фото: ${g.photos.length}` : '';
+                return `
+                    <div class="receipt-gallery-card" onclick="viewReceiptPhotos('${urlsEnc}')">
+                        <img src="${g.photos[0]}" alt="Чек от ${formatDate(g.date)}">
+                        <div class="receipt-gallery-info">
+                            <div>${formatDate(g.date)}</div>
+                            <div class="amount">${formatCurrency(total)}</div>
+                            <div class="receipt-gallery-count">Позиций: ${g.items.length}${photoCount}</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function renderSettlements() {
             const container = document.getElementById('settlements-list');
 
@@ -2737,6 +2864,143 @@
         };
 
         // ============================================
+        // Управление категориями
+        // ============================================
+
+        function categoriesAreLocalDefaults() {
+            return categories.some(c => String(c.id).startsWith('default-cat-'));
+        }
+
+        function categoryUsage(name) {
+            const inExpenses = expenses.filter(e => e.category === name).length;
+            const inPersonal = personalExpenses.filter(p => p.category === name).length;
+            return inExpenses + inPersonal;
+        }
+
+        function renderCategories() {
+            const container = document.getElementById('categories-list');
+            container.innerHTML = categories.map(c => `
+                <div class="people-row">
+                    <input type="text" value="${c.name}" data-category-id="${c.id}" class="category-name-input">
+                    <button class="btn btn-secondary btn-sm" onclick="renameCategory('${c.id}')">Сохранить</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeCategory('${c.id}')">Удалить</button>
+                </div>
+            `).join('');
+        }
+
+        document.getElementById('category-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-category-name');
+            const name = input.value.trim();
+            if (!name) return;
+
+            if (categoryNames().includes(name)) {
+                alert('Такая категория уже есть.');
+                return;
+            }
+
+            const btn = document.getElementById('category-submit-btn');
+            btn.disabled = true;
+
+            try {
+                const maxOrder = categories.reduce((max, c) => Math.max(max, c.sort_order || 0), -1);
+                const created = await dbInsert('categories', { name, sort_order: maxOrder + 1 });
+                categories.push(created);
+                input.value = '';
+                saveCache();
+                renderAll();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка добавления категории:', err);
+                alert('Не удалось добавить категорию. Убедитесь, что таблица categories создана в Supabase.');
+            }
+
+            btn.disabled = false;
+        });
+
+        window.renameCategory = async function(id) {
+            const category = categories.find(c => c.id === id);
+            const input = document.querySelector(`.category-name-input[data-category-id="${id}"]`);
+            if (!category || !input) return;
+
+            const newName = input.value.trim();
+            const oldName = category.name;
+
+            if (!newName || newName === oldName) return;
+            if (categoriesAreLocalDefaults()) {
+                alert('Список категорий пока не хранится в базе. Выполните supabase-schema.sql (таблица categories) в Supabase.');
+                input.value = oldName;
+                return;
+            }
+            if (categoryNames().includes(newName)) {
+                alert('Категория с таким именем уже есть.');
+                input.value = oldName;
+                return;
+            }
+
+            try {
+                await dbUpdate('categories', id, { name: newName });
+                category.name = newName;
+
+                for (const exp of expenses) {
+                    if (exp.category === oldName) {
+                        await dbUpdate('expenses', exp.id, { category: newName });
+                        exp.category = newName;
+                    }
+                }
+
+                for (const pe of personalExpenses) {
+                    if (pe.category === oldName) {
+                        await dbUpdate('personal_expenses', pe.id, { category: newName });
+                        pe.category = newName;
+                    }
+                }
+
+                saveCache();
+                renderAll();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка переименования категории:', err);
+                alert('Не удалось переименовать категорию.');
+                input.value = oldName;
+            }
+        };
+
+        window.removeCategory = function(id) {
+            const category = categories.find(c => c.id === id);
+            if (!category) return;
+
+            if (categoriesAreLocalDefaults()) {
+                alert('Список категорий пока не хранится в базе. Выполните supabase-schema.sql (таблица categories) в Supabase.');
+                return;
+            }
+
+            const usage = categoryUsage(category.name);
+            if (usage > 0) {
+                alert(`Категория «${category.name}» используется в ${usage} записях. Сначала измените их категорию.`);
+                return;
+            }
+
+            if (categories.length <= 1) {
+                alert('Должна остаться хотя бы одна категория.');
+                return;
+            }
+
+            askConfirm('Удалить категорию?', `«${category.name}» будет удалена из списка.`, async () => {
+                try {
+                    await dbDelete('categories', id);
+                    categories = categories.filter(c => c.id !== id);
+                    saveCache();
+                    renderAll();
+                    updateStatus();
+                } catch (err) {
+                    console.error('Ошибка удаления категории:', err);
+                    alert('Не удалось удалить категорию.');
+                }
+            });
+        };
+
+        // ============================================
         // Дашборд
         // ============================================
 
@@ -2747,16 +3011,18 @@
         }
 
         function renderCategoryChart() {
-            const totals = CATEGORIES.map(cat =>
+            const list = categoryNames();
+            const totals = list.map(cat =>
                 expenses.filter(e => e.category === cat).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
             );
+            const colors = list.map((_, i) => CHART_COLORS[i % CHART_COLORS.length]);
 
             if (categoryChart) categoryChart.destroy();
             categoryChart = new Chart(document.getElementById('category-chart'), {
                 type: 'pie',
                 data: {
-                    labels: CATEGORIES,
-                    datasets: [{ data: totals, backgroundColor: CHART_COLORS }]
+                    labels: list,
+                    datasets: [{ data: totals, backgroundColor: colors }]
                 },
                 options: { responsive: true, maintainAspectRatio: false }
             });
@@ -2904,6 +3170,7 @@
 
         function renderAll() {
             renderParticipantInputs();
+            renderCategoryOptions();
             renderExpenses();
             if (currentTab === 'summary') updateSummary();
             if (currentTab === 'dashboard') updateDashboard();
@@ -2912,7 +3179,11 @@
                 renderPersonalExpenses();
                 renderPersonalTotals();
             }
-            if (currentTab === 'people') renderPeople();
+            if (currentTab === 'people') {
+                renderPeople();
+                renderCategories();
+            }
+            if (currentTab === 'receipts') renderReceiptGallery();
         }
 
         function formatDate(dateStr) {
@@ -2960,10 +3231,12 @@
 
             document.getElementById('date').valueAsDate = new Date();
             document.getElementById('personal-date').valueAsDate = new Date();
-            renderCategoryOptions();
 
             if (participants.length === 0) {
                 participants = DEFAULT_PARTICIPANTS.map((name, i) => ({ id: 'default-' + i, name, sort_order: i }));
+            }
+            if (categories.length === 0) {
+                categories = DEFAULT_CATEGORIES.map((name, i) => ({ id: 'default-cat-' + i, name, sort_order: i }));
             }
             if (!selectedPerson) selectedPerson = names()[0] || null;
 
