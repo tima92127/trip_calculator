@@ -1042,6 +1042,16 @@
         </div>
     </div>
 
+    <div id="balance-breakdown-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content" style="max-width: 640px; text-align: left; max-height: 85vh; overflow-y: auto;">
+            <h3 id="balance-breakdown-title" style="margin-bottom: 12px;"></h3>
+            <div id="balance-breakdown-body"></div>
+            <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeBalanceBreakdown()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
     <script src="config.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -2070,6 +2080,7 @@
                             <span>Баланс:</span>
                             <span class="${balanceClass}">${s.balance >= 0 ? '+' : ''}${formatCurrency(s.balance)}</span>
                         </div>
+                        <button type="button" class="btn btn-secondary btn-sm" style="margin-top: 10px;" onclick="openBalanceBreakdown('${encodeURIComponent(p)}')">Из чего складывается?</button>
                     </div>
                 `;
             }).join('');
@@ -2089,12 +2100,12 @@
 
             container.innerHTML = debts.map(d => `
                 <div class="debt-row">
-                    <span style="font-weight: 600;">${d.from}</span>
+                    <span style="font-weight: 600; cursor: pointer; text-decoration: underline dotted;" onclick="openBalanceBreakdown('${encodeURIComponent(d.from)}')">${d.from}</span>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                         <polyline points="12 5 19 12 12 19"></polyline>
                     </svg>
-                    <span style="font-weight: 600;">${d.to}</span>
+                    <span style="font-weight: 600; cursor: pointer; text-decoration: underline dotted;" onclick="openBalanceBreakdown('${encodeURIComponent(d.to)}')">${d.to}</span>
                     <span style="margin-left: auto; font-weight: 600; color: #2563eb;">${formatCurrency(d.amount)}</span>
                     <button class="btn btn-success btn-sm" onclick="settleDebt('${encodeURIComponent(d.from)}', '${encodeURIComponent(d.to)}', ${d.amount.toFixed(2)})">Погасить</button>
                 </div>
@@ -2127,6 +2138,82 @@
                 },
                 'Подтвердить'
             );
+        };
+
+        window.openBalanceBreakdown = function(nameEnc) {
+            const name = decodeURIComponent(nameEnc);
+
+            const paidExpenses = expenses
+                .filter(e => e.payer === name)
+                .sort((a, b) => b.date.localeCompare(a.date));
+            const spentExpenses = expenses
+                .filter(e => (e.splits || {})[name] != null)
+                .sort((a, b) => b.date.localeCompare(a.date));
+            const settledOut = settlements.filter(s => s.from_person === name);
+            const settledIn = settlements.filter(s => s.to_person === name);
+
+            const paidTotal = paidExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+            const spentTotal = spentExpenses.reduce((sum, e) => sum + (Number(e.splits[name]) || 0), 0);
+            const settledOutTotal = settledOut.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+            const settledInTotal = settledIn.reduce((sum, s) => sum + (Number(s.amount) || 0), 0);
+            const balance = paidTotal - spentTotal + settledOutTotal - settledInTotal;
+            const balanceClass = balance > 0.01 ? 'balance-positive' : balance < -0.01 ? 'balance-negative' : 'balance-zero';
+
+            const row = (date, desc, amount) => `
+                <tr>
+                    <td style="white-space: nowrap; color: var(--text-secondary);">${formatDate(date)}</td>
+                    <td>${desc}</td>
+                    <td class="amount" style="text-align: right;">${formatCurrency(amount)}</td>
+                </tr>
+            `;
+            const emptyRow = '<tr><td colspan="3" style="color: var(--text-secondary);">Нет записей</td></tr>';
+
+            const paidRows = paidExpenses.map(e => row(
+                e.date,
+                `${escapeHtml(e.description)} <span style="color: var(--text-secondary);">(${escapeHtml(e.category)})</span>`,
+                e.amount
+            )).join('') || emptyRow;
+
+            const spentRows = spentExpenses.map(e => row(
+                e.date,
+                `${escapeHtml(e.description)} <span style="color: var(--text-secondary);">(оплатил(а) ${escapeHtml(e.payer)})</span>`,
+                e.splits[name]
+            )).join('') || emptyRow;
+
+            let settlementsHtml = '';
+            if (settledOut.length || settledIn.length) {
+                const combined = [
+                    ...settledOut.map(s => ({ date: s.date, desc: `Перевёл(а) ${escapeHtml(s.to_person)}`, amount: -s.amount })),
+                    ...settledIn.map(s => ({ date: s.date, desc: `Получил(а) от ${escapeHtml(s.from_person)}`, amount: s.amount }))
+                ].sort((a, b) => b.date.localeCompare(a.date));
+                const settleRows = combined.map(s => row(s.date, s.desc, s.amount)).join('');
+                settlementsHtml = `
+                    <h4 style="margin: 16px 0 8px; font-size: 0.9rem;">Взаиморасчёты</h4>
+                    <table><tbody>${settleRows}</tbody></table>
+                `;
+            }
+
+            document.getElementById('balance-breakdown-title').textContent = `Из чего складывается баланс: ${name}`;
+            document.getElementById('balance-breakdown-body').innerHTML = `
+                <h4 style="margin-bottom: 8px; font-size: 0.9rem;">Оплатил(а) целиком — ${formatCurrency(paidTotal)}</h4>
+                <table><tbody>${paidRows}</tbody></table>
+
+                <h4 style="margin: 16px 0 8px; font-size: 0.9rem;">Его/её доля в общих расходах — ${formatCurrency(spentTotal)}</h4>
+                <table><tbody>${spentRows}</tbody></table>
+
+                ${settlementsHtml}
+
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; font-weight: 600;">
+                    <span>Итоговый баланс</span>
+                    <span class="${balanceClass}">${balance >= 0 ? '+' : ''}${formatCurrency(balance)}</span>
+                </div>
+            `;
+
+            document.getElementById('balance-breakdown-modal').classList.remove('hidden');
+        };
+
+        window.closeBalanceBreakdown = function() {
+            document.getElementById('balance-breakdown-modal').classList.add('hidden');
         };
 
         function renderSettlements() {
