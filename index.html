@@ -1407,6 +1407,7 @@
                     <div class="receipt-item-main">
                         <input type="text" class="receipt-item-desc" data-index="${i}" value="${escapeHtml(c.text)}" placeholder="Описание">
                         <input type="number" step="0.01" min="0" class="receipt-item-amount" data-index="${i}" value="${c.amount}">
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removeReceiptItem(${i})" title="Убрать эту позицию">✕</button>
                     </div>
                     <div class="receipt-item-participants">
                         ${participantNames.map(p => `
@@ -1421,6 +1422,11 @@
 
             updateReceiptSaveButton();
         }
+
+        window.removeReceiptItem = function(index) {
+            receiptCandidates.splice(index, 1);
+            renderReceiptItems();
+        };
 
         function renderReceiptPhotoThumbnails() {
             const strip = document.getElementById('receipt-photos-strip');
