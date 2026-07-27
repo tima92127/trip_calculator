@@ -603,6 +603,32 @@
             margin-bottom: 8px;
         }
 
+        .receipt-candidate-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            background: var(--bg);
+            border-radius: 8px;
+            margin-bottom: 6px;
+        }
+
+        .receipt-candidate-row .receipt-candidate-text {
+            flex: 1;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .receipt-candidate-row input {
+            width: 90px;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
         .people-row input {
             flex: 1;
             padding: 8px 10px;
@@ -673,7 +699,10 @@
 
         <div id="expenses-tab">
             <div class="card">
-                <div class="card-title" id="expense-form-title">Добавить расход</div>
+                <div class="card-title" id="expense-form-title" style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <span>Добавить расход</span>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openReceiptModal()">📷 Скан чека</button>
+                </div>
                 <form id="expense-form">
                     <div class="form-grid">
                         <div class="form-group">
@@ -965,10 +994,159 @@
         </div>
     </div>
 
+    <div id="receipt-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content" style="max-width: 480px; text-align: left; max-height: 85vh; overflow-y: auto;">
+            <h3 style="margin-bottom: 12px;">Скан чека</h3>
+
+            <div id="receipt-upload-step">
+                <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
+                    Сфотографируйте чек или выберите фото. Экспериментальная функция —
+                    распознавание работает на устройстве и может ошибаться, особенно
+                    на мятых термочеках. Проверяйте суммы перед сохранением.
+                </p>
+                <input type="file" id="receipt-file-input" accept="image/*" capture="environment">
+            </div>
+
+            <div id="receipt-progress" class="hidden" style="text-align: center; padding: 20px 0;">
+                <div class="spinner" style="width: 28px; height: 28px; margin: 0 auto 12px; color: var(--primary);"></div>
+                <p id="receipt-progress-text" style="color: var(--text-secondary); font-size: 0.9rem;">Распознаём текст...</p>
+            </div>
+
+            <div id="receipt-results" class="hidden">
+                <p style="color: var(--text-secondary); margin-bottom: 8px; font-size: 0.85rem;">
+                    Найденные суммы — нажмите, чтобы подставить в форму расхода (описание и сумму можно поправить перед сохранением):
+                </p>
+                <div id="receipt-candidates"></div>
+                <p id="receipt-no-results" class="hidden" style="color: var(--text-secondary); font-size: 0.9rem;">
+                    Суммы не распознаны. Можно ввести данные вручную.
+                </p>
+                <details style="margin-top: 12px;">
+                    <summary style="cursor: pointer; color: var(--text-secondary); font-size: 0.85rem;">Показать весь распознанный текст</summary>
+                    <pre id="receipt-raw-text" style="white-space: pre-wrap; font-size: 0.8rem; color: var(--text-secondary); margin-top: 8px; max-height: 150px; overflow-y: auto;"></pre>
+                </details>
+            </div>
+
+            <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: flex-end;">
+                <button type="button" class="btn btn-secondary" onclick="closeReceiptModal()">Закрыть</button>
+            </div>
+        </div>
+    </div>
+
     <script src="config.js"></script>
     <script type="module">
         import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
         import Chart from 'https://esm.sh/chart.js@4/auto';
+
+        // ============================================
+        // Скан чека (распознавание текста на устройстве)
+        // ============================================
+
+        let tesseractWorkerPromise = null;
+        let receiptCandidates = [];
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+
+        function getTesseractWorker() {
+            if (!tesseractWorkerPromise) {
+                tesseractWorkerPromise = (async () => {
+                    const { createWorker } = await import('https://esm.sh/tesseract.js@5');
+                    return createWorker('rus+eng');
+                })();
+            }
+            return tesseractWorkerPromise;
+        }
+
+        window.openReceiptModal = function() {
+            document.getElementById('receipt-modal').classList.remove('hidden');
+            document.getElementById('receipt-upload-step').classList.remove('hidden');
+            document.getElementById('receipt-progress').classList.add('hidden');
+            document.getElementById('receipt-results').classList.add('hidden');
+            document.getElementById('receipt-file-input').value = '';
+        };
+
+        window.closeReceiptModal = function() {
+            document.getElementById('receipt-modal').classList.add('hidden');
+        };
+
+        function extractAmountCandidates(text) {
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            const amountRe = /(\d[\d ]*)[.,](\d{2})\s*(?:₽|руб\.?|р\.?)?\s*$/i;
+            const results = [];
+            for (const line of lines) {
+                const m = line.match(amountRe);
+                if (!m) continue;
+                const value = parseFloat(`${m[1].replace(/\s/g, '')}.${m[2]}`);
+                if (!Number.isFinite(value) || value <= 0 || value > 1000000) continue;
+                results.push({ text: line, amount: value });
+            }
+            return results;
+        }
+
+        function showReceiptResults(text) {
+            document.getElementById('receipt-progress').classList.add('hidden');
+            document.getElementById('receipt-results').classList.remove('hidden');
+            document.getElementById('receipt-raw-text').textContent = text.trim() || '(пусто)';
+
+            receiptCandidates = extractAmountCandidates(text);
+            const container = document.getElementById('receipt-candidates');
+            const noResults = document.getElementById('receipt-no-results');
+
+            if (receiptCandidates.length === 0) {
+                container.innerHTML = '';
+                noResults.classList.remove('hidden');
+                return;
+            }
+            noResults.classList.add('hidden');
+            container.innerHTML = receiptCandidates.map((c, i) => `
+                <div class="receipt-candidate-row">
+                    <span class="receipt-candidate-text" title="${escapeHtml(c.text)}">${escapeHtml(c.text)}</span>
+                    <input type="number" step="0.01" value="${c.amount}" data-candidate-index="${i}" class="receipt-amount-input">
+                    <button type="button" class="btn btn-primary btn-sm" onclick="useReceiptCandidate(${i})">Использовать</button>
+                </div>
+            `).join('');
+        }
+
+        window.useReceiptCandidate = function(index) {
+            const candidate = receiptCandidates[index];
+            const input = document.querySelector(`.receipt-amount-input[data-candidate-index="${index}"]`);
+            if (!candidate || !input) return;
+
+            const amount = parseFloat(input.value);
+            document.getElementById('amount').value = Number.isFinite(amount) ? amount : candidate.amount;
+
+            if (!document.getElementById('description').value.trim()) {
+                const cleaned = candidate.text.replace(/[\d\s.,₽рруб]+$/i, '').trim();
+                document.getElementById('description').value = cleaned || candidate.text;
+            }
+
+            closeReceiptModal();
+            document.getElementById('expense-form').scrollIntoView({ behavior: 'smooth' });
+        };
+
+        document.getElementById('receipt-file-input').addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            document.getElementById('receipt-upload-step').classList.add('hidden');
+            document.getElementById('receipt-progress').classList.remove('hidden');
+            document.getElementById('receipt-progress-text').textContent = 'Загружаем модуль распознавания (это может занять время при первом запуске)...';
+
+            try {
+                const worker = await getTesseractWorker();
+                document.getElementById('receipt-progress-text').textContent = 'Распознаём текст...';
+                const { data: { text } } = await worker.recognize(file);
+                showReceiptResults(text);
+            } catch (err) {
+                console.error('Ошибка распознавания чека:', err);
+                document.getElementById('receipt-progress').classList.add('hidden');
+                document.getElementById('receipt-upload-step').classList.remove('hidden');
+                alert('Не удалось распознать чек. Попробуйте другое фото или введите данные вручную.');
+            }
+        });
 
         // ============================================
         // НАСТРОЙКИ - берутся из config.js (см. config.example.js)
