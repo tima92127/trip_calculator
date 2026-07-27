@@ -1,4 +1,4 @@
-const CACHE = 'trip-calc-v1';
+const CACHE = 'trip-calc-v2';
 const SHELL = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', event => {

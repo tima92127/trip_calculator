@@ -1175,9 +1175,15 @@
     </div>
 
     <script src="config.js"></script>
+    <script src="vendor/supabase.js"></script>
+    <script src="vendor/chart.js"></script>
     <script type="module">
-        import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-        import Chart from 'https://esm.sh/chart.js@4/auto';
+        // supabase-js и chart.js — локальные копии (vendor/), а не esm.sh: в некоторых
+        // регионах Cloudflare (на котором работает esm.sh) недоступен без VPN, а GitHub
+        // Pages и Supabase — доступны. Раньше это ломало приложение целиком, так как
+        // скрипт с этим импортом не выполнялся вовсе, если esm.sh не отвечал.
+        const { createClient } = window.supabase;
+        const Chart = window.Chart;
 
         // ============================================
         // Скан чека (распознавание текста на устройстве)
