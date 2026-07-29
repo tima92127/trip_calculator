@@ -59,6 +59,23 @@
             font-size: 0.9rem;
         }
 
+        .trip-switcher {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .trip-switcher select {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            background: var(--card);
+            color: var(--text);
+        }
+
         .card {
             background: var(--card);
             border-radius: 12px;
@@ -771,6 +788,10 @@
         <header>
             <h1>Калькулятор расходов</h1>
             <p class="subtitle">Распределяйте расходы поездки между участниками</p>
+            <div class="trip-switcher">
+                <select id="trip-select" onchange="switchTrip(this.value)"></select>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="promptNewTrip()">+ Поездка</button>
+            </div>
         </header>
 
         <div id="status-bar" class="status-bar loading">
@@ -1064,6 +1085,27 @@
                     </div>
                 </form>
             </div>
+
+            <div class="card">
+                <div class="card-title">Поездки</div>
+                <div id="trips-list"></div>
+                <p class="hint">Каждая поездка — отдельный набор участников, категорий, расходов и расчётов. Удалить можно только неактивную поездку, если их больше одной.</p>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Добавить поездку</div>
+                <form id="trip-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="new-trip-name">Название</label>
+                            <input type="text" id="new-trip-name" placeholder="Например: Другие траты" required>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="trip-submit-btn">Добавить</button>
+                    </div>
+                </form>
+            </div>
         </div>
 
         <div id="receipts-tab" class="hidden">
@@ -1074,6 +1116,18 @@
                     <p>Пока нет отсканированных чеков.</p>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <div id="trip-picker-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content" style="text-align: left;">
+            <h3>Выберите поездку</h3>
+            <div id="trip-picker-list" style="display: flex; flex-direction: column; gap: 8px; margin: 12px 0;"></div>
+            <p id="trip-picker-empty" class="hint hidden">Нет доступных поездок. Подключитесь к интернету, чтобы создать первую.</p>
+            <form id="trip-picker-form" style="display: flex; gap: 8px; margin-top: 12px;">
+                <input type="text" id="trip-picker-name" placeholder="Название новой поездки" style="flex: 1;">
+                <button type="submit" class="btn btn-primary btn-sm">Создать</button>
+            </form>
         </div>
     </div>
 
@@ -1639,7 +1693,11 @@
         const TABS = ['expenses', 'summary', 'dashboard', 'personal', 'people', 'receipts'];
         const CACHE_KEY = 'trip-calc-cache-v1';
         const QUEUE_KEY = 'trip-calc-queue-v1';
+        const ACTIVE_TRIP_KEY = 'trip-calc-active-trip';
+        const TRIPS_CACHE_KEY = 'trip-calc-trips-cache-v1';
 
+        let trips = [];
+        let activeTripId = null;
         let participants = [];
         let categories = [];
         let expenses = [];
@@ -1670,9 +1728,19 @@
         // Локальный кэш и очередь офлайн-изменений
         // ============================================
 
+        function cacheKey() {
+            return `${CACHE_KEY}:${activeTripId}`;
+        }
+
         function loadCache() {
+            participants = [];
+            categories = [];
+            expenses = [];
+            personalExpenses = [];
+            settlements = [];
+            if (!activeTripId) return;
             try {
-                const raw = localStorage.getItem(CACHE_KEY);
+                const raw = localStorage.getItem(cacheKey());
                 if (!raw) return;
                 const cache = JSON.parse(raw);
                 participants = cache.participants || [];
@@ -1686,10 +1754,27 @@
         }
 
         function saveCache() {
+            if (!activeTripId) return;
             try {
-                localStorage.setItem(CACHE_KEY, JSON.stringify({ participants, categories, expenses, personalExpenses, settlements }));
+                localStorage.setItem(cacheKey(), JSON.stringify({ participants, categories, expenses, personalExpenses, settlements }));
             } catch (err) {
                 console.warn('Не удалось сохранить кэш:', err);
+            }
+        }
+
+        function loadTripsCache() {
+            try {
+                trips = JSON.parse(localStorage.getItem(TRIPS_CACHE_KEY) || '[]');
+            } catch {
+                trips = [];
+            }
+        }
+
+        function saveTripsCache() {
+            try {
+                localStorage.setItem(TRIPS_CACHE_KEY, JSON.stringify(trips));
+            } catch (err) {
+                console.warn('Не удалось сохранить кэш поездок:', err);
             }
         }
 
@@ -1719,17 +1804,19 @@
             if (table === 'participants') return participants;
             if (table === 'categories') return categories;
             if (table === 'settlements') return settlements;
+            if (table === 'trips') return trips;
             return [];
         }
 
         async function dbInsert(table, row) {
+            const payload = table === 'trips' ? row : { ...row, trip_id: activeTripId };
             if (!navigator.onLine) {
-                const local = { ...row, id: 'local-' + crypto.randomUUID() };
-                pendingQueue.push({ op: 'insert', table, row, tempId: local.id });
+                const local = { ...payload, id: 'local-' + crypto.randomUUID() };
+                pendingQueue.push({ op: 'insert', table, row: payload, tempId: local.id });
                 saveQueue();
                 return local;
             }
-            const { data, error } = await supabase.from(table).insert([row]).select().single();
+            const { data, error } = await supabase.from(table).insert([payload]).select().single();
             if (error) throw error;
             return data;
         }
@@ -1809,13 +1896,21 @@
         // Загрузка данных
         // ============================================
 
+        async function fetchTrips() {
+            const { data, error } = await supabase.from('trips').select('*').order('sort_order', { ascending: true });
+            if (error) throw error;
+            trips = data || [];
+            saveTripsCache();
+        }
+
         async function fetchAll() {
+            if (!activeTripId) return;
             const [p, c, e, pe, s] = await Promise.all([
-                supabase.from('participants').select('*').order('sort_order', { ascending: true }),
-                supabase.from('categories').select('*').order('sort_order', { ascending: true }),
-                supabase.from('expenses').select('*').order('date', { ascending: false }),
-                supabase.from('personal_expenses').select('*').order('date', { ascending: false }),
-                supabase.from('settlements').select('*').order('date', { ascending: false })
+                supabase.from('participants').select('*').eq('trip_id', activeTripId).order('sort_order', { ascending: true }),
+                supabase.from('categories').select('*').eq('trip_id', activeTripId).order('sort_order', { ascending: true }),
+                supabase.from('expenses').select('*').eq('trip_id', activeTripId).order('date', { ascending: false }),
+                supabase.from('personal_expenses').select('*').eq('trip_id', activeTripId).order('date', { ascending: false }),
+                supabase.from('settlements').select('*').eq('trip_id', activeTripId).order('date', { ascending: false })
             ]);
 
             if (e.error) throw e.error;
@@ -1853,6 +1948,7 @@
                     clearTimeout(refetchTimer);
                     refetchTimer = setTimeout(async () => {
                         try {
+                            await fetchTrips();
                             await fetchAll();
                             renderAll();
                             updateStatus();
@@ -2889,6 +2985,191 @@
         };
 
         // ============================================
+        // Управление поездками (сессиями)
+        // ============================================
+
+        function renderTripSwitcher() {
+            const select = document.getElementById('trip-select');
+            if (!select) return;
+            select.innerHTML = trips.map(t => `<option value="${t.id}" ${t.id === activeTripId ? 'selected' : ''}>${t.name}</option>`).join('');
+        }
+
+        function renderTripsSettings() {
+            const container = document.getElementById('trips-list');
+            if (!container) return;
+            container.innerHTML = trips.map(t => `
+                <div class="people-row">
+                    <input type="text" value="${t.name}" data-trip-id="${t.id}" class="trip-name-input">
+                    <button class="btn btn-secondary btn-sm" onclick="renameTrip('${t.id}')">Сохранить</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeTrip('${t.id}')" ${t.id === activeTripId ? 'disabled title="Сначала переключитесь на другую поездку"' : ''}>Удалить</button>
+                </div>
+            `).join('');
+        }
+
+        async function createTrip(name) {
+            const maxOrder = trips.reduce((max, t) => Math.max(max, t.sort_order || 0), -1);
+            const created = await dbInsert('trips', { name, sort_order: maxOrder + 1 });
+            trips.push(created);
+            saveTripsCache();
+            return created;
+        }
+
+        window.switchTrip = async function(id) {
+            if (!id || id === activeTripId) return;
+            activeTripId = id;
+            localStorage.setItem(ACTIVE_TRIP_KEY, activeTripId);
+            loadCache();
+            renderAll();
+            updateStatus();
+            if (navigator.onLine) {
+                try {
+                    await fetchAll();
+                } catch (err) {
+                    console.error('Ошибка загрузки поездки:', err);
+                }
+                renderAll();
+                updateStatus();
+            }
+        };
+
+        window.promptNewTrip = async function() {
+            if (!navigator.onLine) {
+                alert('Создание поездки недоступно офлайн — подключитесь к интернету.');
+                return;
+            }
+            const name = prompt('Название новой поездки:');
+            if (!name || !name.trim()) return;
+            try {
+                const created = await createTrip(name.trim());
+                renderTripSwitcher();
+                await switchTrip(created.id);
+            } catch (err) {
+                console.error('Ошибка создания поездки:', err);
+                alert('Не удалось создать поездку.');
+            }
+        };
+
+        window.renameTrip = async function(id) {
+            const trip = trips.find(t => t.id === id);
+            const input = document.querySelector(`.trip-name-input[data-trip-id="${id}"]`);
+            if (!trip || !input) return;
+
+            const newName = input.value.trim();
+            const oldName = trip.name;
+            if (!newName || newName === oldName) return;
+
+            try {
+                await dbUpdate('trips', id, { name: newName });
+                trip.name = newName;
+                saveTripsCache();
+                renderTripSwitcher();
+                renderTripsSettings();
+            } catch (err) {
+                console.error('Ошибка переименования поездки:', err);
+                alert('Не удалось переименовать поездку.');
+                input.value = oldName;
+            }
+        };
+
+        window.removeTrip = function(id) {
+            const trip = trips.find(t => t.id === id);
+            if (!trip) return;
+
+            if (id === activeTripId) {
+                alert('Нельзя удалить текущую поездку. Сначала переключитесь на другую.');
+                return;
+            }
+            if (trips.length <= 1) {
+                alert('Должна остаться хотя бы одна поездка.');
+                return;
+            }
+            if (!navigator.onLine) {
+                alert('Удаление поездки недоступно офлайн — подключитесь к интернету.');
+                return;
+            }
+
+            askConfirm('Удалить поездку?', `«${trip.name}» и все её расходы, участники и расчёты будут удалены безвозвратно.`, async () => {
+                try {
+                    await dbDelete('trips', id);
+                    trips = trips.filter(t => t.id !== id);
+                    saveTripsCache();
+                    renderTripSwitcher();
+                    renderTripsSettings();
+                } catch (err) {
+                    console.error('Ошибка удаления поездки:', err);
+                    alert('Не удалось удалить поездку.');
+                }
+            });
+        };
+
+        function showTripPicker() {
+            return new Promise((resolve) => {
+                const modal = document.getElementById('trip-picker-modal');
+                const list = document.getElementById('trip-picker-list');
+                const emptyMsg = document.getElementById('trip-picker-empty');
+                const form = document.getElementById('trip-picker-form');
+                const input = document.getElementById('trip-picker-name');
+
+                async function handleOnline() {
+                    if (trips.length === 0) {
+                        try { await fetchTrips(); } catch (err) { console.error(err); }
+                        renderList();
+                    }
+                }
+
+                function finish(id) {
+                    form.onsubmit = null;
+                    window.removeEventListener('online', handleOnline);
+                    modal.classList.add('hidden');
+                    resolve(id);
+                }
+
+                function renderList() {
+                    list.innerHTML = trips.map(t => `<button type="button" class="btn btn-secondary" data-trip-id="${t.id}">${t.name}</button>`).join('');
+                    emptyMsg.classList.toggle('hidden', trips.length > 0 || navigator.onLine);
+                    list.querySelectorAll('button[data-trip-id]').forEach(btn => {
+                        btn.onclick = () => finish(btn.dataset.tripId);
+                    });
+                }
+
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const name = input.value.trim();
+                    if (!name) return;
+                    if (!navigator.onLine) {
+                        alert('Создание поездки недоступно офлайн — подключитесь к интернету.');
+                        return;
+                    }
+                    try {
+                        const created = await createTrip(name);
+                        finish(created.id);
+                    } catch (err) {
+                        console.error('Ошибка создания поездки:', err);
+                        alert('Не удалось создать поездку.');
+                    }
+                };
+
+                window.addEventListener('online', handleOnline);
+                renderList();
+                modal.classList.remove('hidden');
+            });
+        }
+
+        async function resolveActiveTrip() {
+            const stored = localStorage.getItem(ACTIVE_TRIP_KEY);
+            if (stored && trips.some(t => t.id === stored)) {
+                activeTripId = stored;
+                return;
+            }
+            if (trips.length === 1) {
+                activeTripId = trips[0].id;
+            } else {
+                activeTripId = await showTripPicker();
+            }
+            localStorage.setItem(ACTIVE_TRIP_KEY, activeTripId);
+        }
+
+        // ============================================
         // Управление категориями
         // ============================================
 
@@ -2938,6 +3219,33 @@
             } catch (err) {
                 console.error('Ошибка добавления категории:', err);
                 alert('Не удалось добавить категорию. Убедитесь, что таблица categories создана в Supabase.');
+            }
+
+            btn.disabled = false;
+        });
+
+        document.getElementById('trip-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const input = document.getElementById('new-trip-name');
+            const name = input.value.trim();
+            if (!name) return;
+
+            if (!navigator.onLine) {
+                alert('Создание поездки недоступно офлайн — подключитесь к интернету.');
+                return;
+            }
+
+            const btn = document.getElementById('trip-submit-btn');
+            btn.disabled = true;
+
+            try {
+                await createTrip(name);
+                input.value = '';
+                renderTripSwitcher();
+                renderTripsSettings();
+            } catch (err) {
+                console.error('Ошибка добавления поездки:', err);
+                alert('Не удалось добавить поездку.');
             }
 
             btn.disabled = false;
@@ -3194,6 +3502,7 @@
         };
 
         function renderAll() {
+            renderTripSwitcher();
             renderParticipantInputs();
             renderCategoryOptions();
             renderExpenses();
@@ -3207,6 +3516,7 @@
             if (currentTab === 'people') {
                 renderPeople();
                 renderCategories();
+                renderTripsSettings();
             }
             if (currentTab === 'receipts') renderReceiptGallery();
         }
@@ -3252,10 +3562,21 @@
 
         async function init() {
             loadQueue();
-            loadCache();
+            loadTripsCache();
 
             document.getElementById('date').valueAsDate = new Date();
             document.getElementById('personal-date').valueAsDate = new Date();
+
+            if (navigator.onLine) {
+                try {
+                    await fetchTrips();
+                } catch (err) {
+                    console.error('Ошибка загрузки списка поездок:', err);
+                }
+            }
+
+            await resolveActiveTrip();
+            loadCache();
 
             if (participants.length === 0) {
                 participants = DEFAULT_PARTICIPANTS.map((name, i) => ({ id: 'default-' + i, name, sort_order: i }));
