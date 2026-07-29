@@ -800,10 +800,10 @@
         </div>
 
         <div class="tabs">
-            <button class="tab active" onclick="showTab('expenses')">Расходы</button>
-            <button class="tab" onclick="showTab('summary')">Итоги</button>
-            <button class="tab" onclick="showTab('dashboard')">Дашборд</button>
+            <button class="tab active" onclick="showTab('expenses')">Общие</button>
             <button class="tab" onclick="showTab('personal')">Личное</button>
+            <button class="tab" onclick="showTab('dashboard')">Дашборд</button>
+            <button class="tab" onclick="showTab('summary')">Итоги</button>
             <button class="tab" onclick="showTab('people')">Настройки</button>
             <button class="tab" onclick="showTab('receipts')">Чеки</button>
         </div>
@@ -1690,7 +1690,7 @@
         const DEFAULT_PARTICIPANTS = ['Тимур', 'Наташа', 'Андрей', 'Рома', 'Санёк'];
         const DEFAULT_CATEGORIES = ['Жильё', 'Транспорт', 'Еда', 'Развлечения', 'Прочее'];
         const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
-        const TABS = ['expenses', 'summary', 'dashboard', 'personal', 'people', 'receipts'];
+        const TABS = ['expenses', 'personal', 'dashboard', 'summary', 'people', 'receipts'];
         const CACHE_KEY = 'trip-calc-cache-v1';
         const QUEUE_KEY = 'trip-calc-queue-v1';
         const ACTIVE_TRIP_KEY = 'trip-calc-active-trip';
