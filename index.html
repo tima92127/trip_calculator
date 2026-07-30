@@ -651,6 +651,19 @@
             margin-bottom: 8px;
         }
 
+        .receipt-total-hint {
+            font-size: 0.85rem;
+            margin-bottom: 12px;
+        }
+
+        .receipt-total-hint.ok {
+            color: var(--success);
+        }
+
+        .receipt-total-hint.mismatch {
+            color: var(--warning);
+        }
+
         .receipt-item-row {
             padding: 10px;
             background: var(--bg);
@@ -1350,6 +1363,7 @@
                     </div>
                 </div>
 
+                <div id="receipt-total-hint"></div>
                 <div id="receipt-candidates"></div>
                 <p id="receipt-no-results" class="hidden" style="color: var(--text-secondary); font-size: 0.9rem;">
                     Позиции не распознаны. Можно ввести данные вручную.
@@ -1493,8 +1507,15 @@
 
         let tesseractWorkerPromise = null;
         let receiptCandidates = [];
-        let receiptSessionPhotos = [];   // [{ id, blob, previewUrl }] — все фото текущего сеанса скана
+        let receiptSessionPhotos = [];   // [{ id, blob, previewUrl, detectedTotal }] — все фото текущего сеанса скана
         let receiptSessionRawTexts = []; // распознанный текст каждого фото, для debug-блока
+
+        // Сумма строк "ИТОГ" по всем фото сеанса — null, если ни на одном фото
+        // итоговая строка не распозналась (тогда сверку не показываем).
+        function getReceiptDetectedTotal() {
+            const totals = receiptSessionPhotos.map(p => p.detectedTotal).filter(t => t != null);
+            return totals.length > 0 ? totals.reduce((a, b) => a + b, 0) : null;
+        }
 
         function escapeHtml(str) {
             const div = document.createElement('div');
@@ -1616,6 +1637,16 @@
             return (str.match(/[a-zA-Zа-яА-ЯёЁ]/g) || []).length >= 3;
         }
 
+        // Итоговая строка чека — не позиция, а сумма для сверки с суммой позиций.
+        // \b не подходит: граница слова в JS-регэкспах определяется по [A-Za-z0-9_],
+        // кириллица в него не входит, поэтому \b после кириллической буквы не сработает.
+        const RECEIPT_TOTAL_RE = /^итого?(?=\s|$)/i;
+
+        // Служебные строки внизу чека (способ оплаты, НДС, сдача и т.п.) — технически
+        // выглядят как "текст + сумма в конце строки", как и обычная позиция, поэтому
+        // без этого списка попадали в список позиций наравне с реальными покупками.
+        const RECEIPT_NON_ITEM_RE = /^(сумма\s*ндс|ндс(\s*\d+%?)?|наличными|безналичными|электронными|получено(\s*(наличными|безналичными))?|сдача|предоплата|постоплата|скидка|бонус\w*|оплачено|внесено)(?=\s|$)/i;
+
         function dedupeCandidates(results) {
             return results.filter((c, i) => {
                 const prev = results[i - 1];
@@ -1630,6 +1661,7 @@
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
             const results = [];
             let contextDesc = '';
+            let total = null;
 
             for (const line of lines) {
                 const cells = line.split('\t').map(c => c.trim()).filter(Boolean);
@@ -1645,11 +1677,22 @@
                 }
 
                 const descCells = cells.slice(0, -1).filter(isMeaningfulText).join(' ');
-                if (descCells) contextDesc = descCells;
+                const desc = descCells || contextDesc || lastCell;
 
+                if (RECEIPT_TOTAL_RE.test(desc)) {
+                    total = amount;
+                    contextDesc = '';
+                    continue;
+                }
+                if (RECEIPT_NON_ITEM_RE.test(desc)) {
+                    contextDesc = '';
+                    continue;
+                }
+
+                if (descCells) contextDesc = descCells;
                 results.push({ text: contextDesc || lastCell, amount });
             }
-            return dedupeCandidates(results);
+            return { items: dedupeCandidates(results), total };
         }
 
         // Обычный текст (локальный Tesseract или облако без табличной разметки):
@@ -1660,6 +1703,10 @@
             const results = [];
             let currentDesc = null;
             let lastAmount = null;
+            let total = null;
+            // "ИТОГ" встретилась отдельной строкой, без суммы на ней самой — сумма
+            // придёт следующей строкой, её нужно перехватить как total, а не как lastAmount.
+            let awaitingTotalAmount = false;
 
             const flush = () => {
                 if (currentDesc && lastAmount != null) {
@@ -1675,6 +1722,24 @@
                     const amount = parseAmountMatch(m);
                     if (amount === null) continue;
                     const prefix = line.slice(0, m.index).trim();
+
+                    if (awaitingTotalAmount && !prefix) {
+                        total = amount;
+                        awaitingTotalAmount = false;
+                        continue;
+                    }
+                    awaitingTotalAmount = false;
+
+                    if (prefix && RECEIPT_TOTAL_RE.test(prefix)) {
+                        flush();
+                        total = amount;
+                        continue;
+                    }
+                    if (prefix && RECEIPT_NON_ITEM_RE.test(prefix)) {
+                        flush();
+                        continue;
+                    }
+
                     if (prefix && isMeaningfulText(prefix)) {
                         flush();
                         results.push({ text: prefix, amount });
@@ -1686,11 +1751,23 @@
 
                 if (!isMeaningfulText(line)) continue; // мусор/маркеры кол-ва — не сбрасываем контекст
 
+                if (RECEIPT_TOTAL_RE.test(line)) {
+                    flush();
+                    awaitingTotalAmount = true;
+                    continue;
+                }
+                if (RECEIPT_NON_ITEM_RE.test(line)) {
+                    flush();
+                    awaitingTotalAmount = false;
+                    continue;
+                }
+
                 flush();
+                awaitingTotalAmount = false;
                 currentDesc = line;
             }
             flush();
-            return dedupeCandidates(results);
+            return { items: dedupeCandidates(results), total };
         }
 
         function extractAmountCandidates(text) {
@@ -1699,10 +1776,32 @@
                 : extractAmountCandidatesPlain(text);
         }
 
+        function renderReceiptTotalHint() {
+            const container = document.getElementById('receipt-total-hint');
+            const total = getReceiptDetectedTotal();
+            if (total == null) {
+                container.innerHTML = '';
+                return;
+            }
+
+            // Считаем по текущим значениям в полях (не по исходному receiptCandidates),
+            // чтобы сверка обновлялась и при ручной правке суммы позиции.
+            const sum = Array.from(document.querySelectorAll('#receipt-candidates .receipt-item-amount'))
+                .map(el => parseFloat(el.value))
+                .filter(v => Number.isFinite(v))
+                .reduce((s, v) => s + v, 0);
+            const diff = Math.round((sum - total) * 100) / 100;
+            container.innerHTML = Math.abs(diff) < 0.01
+                ? `<p class="receipt-total-hint ok">Сумма позиций совпадает с итогом чека: ${formatCurrency(sum)}.</p>`
+                : `<p class="receipt-total-hint mismatch">⚠ Сумма позиций (${formatCurrency(sum)}) расходится с итогом чека (${formatCurrency(total)}) на ${formatCurrency(Math.abs(diff))} — проверьте, не пропущена ли или не лишняя ли позиция.</p>`;
+        }
+
         function renderReceiptItems() {
             const container = document.getElementById('receipt-candidates');
             const noResults = document.getElementById('receipt-no-results');
             const saveBtn = document.getElementById('receipt-save-btn');
+
+            renderReceiptTotalHint();
 
             if (receiptCandidates.length === 0) {
                 container.innerHTML = '';
@@ -1773,9 +1872,10 @@
 
         function addReceiptPhotoToSession(blob, text) {
             const photoId = crypto.randomUUID();
-            receiptSessionPhotos.push({ id: photoId, blob, previewUrl: URL.createObjectURL(blob) });
+            const { items, total } = extractAmountCandidates(text);
+            receiptSessionPhotos.push({ id: photoId, blob, previewUrl: URL.createObjectURL(blob), detectedTotal: total });
 
-            const newItems = extractAmountCandidates(text).map(c => ({ ...c, photoId }));
+            const newItems = items.map(c => ({ ...c, photoId }));
             receiptCandidates = receiptCandidates.concat(newItems);
 
             receiptSessionRawTexts.push(text.trim() || '(пусто)');
@@ -1820,8 +1920,13 @@
             btn.disabled = count === 0;
         }
 
-        document.getElementById('receipt-candidates').addEventListener('input', updateReceiptSaveButton);
-        document.getElementById('receipt-candidates').addEventListener('change', updateReceiptSaveButton);
+        function handleReceiptCandidatesChange() {
+            updateReceiptSaveButton();
+            renderReceiptTotalHint();
+        }
+
+        document.getElementById('receipt-candidates').addEventListener('input', handleReceiptCandidatesChange);
+        document.getElementById('receipt-candidates').addEventListener('change', handleReceiptCandidatesChange);
 
         async function uploadReceiptPhotos() {
             const urls = [];
