@@ -741,7 +741,8 @@
             cursor: pointer;
         }
 
-        .people-row input {
+        .people-row input,
+        .people-row select {
             flex: 1;
             padding: 8px 10px;
             border: 1px solid var(--border);
@@ -754,6 +755,90 @@
             font-size: 0.85rem;
             color: var(--text-secondary);
             margin-top: 12px;
+        }
+
+        .budget-bar-wrap {
+            margin-top: 12px;
+        }
+
+        .budget-bar {
+            height: 8px;
+            border-radius: 4px;
+            background: var(--bg);
+            overflow: hidden;
+        }
+
+        .budget-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: var(--success);
+            transition: width 0.2s;
+        }
+
+        .budget-bar-fill.over {
+            background: var(--danger);
+        }
+
+        .budget-bar-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 6px;
+        }
+
+        .budget-edit-row {
+            margin-top: 16px;
+            padding-top: 12px;
+            border-top: 1px solid var(--border);
+        }
+
+        .budget-edit-row label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .budget-edit-controls {
+            display: flex;
+            gap: 8px;
+        }
+
+        .budget-edit-controls input {
+            flex: 1;
+            padding: 8px 10px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.9rem;
+            min-width: 0;
+        }
+
+        .template-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+
+        .template-chip {
+            padding: 6px 12px;
+            border: 1px solid var(--border);
+            border-radius: 999px;
+            background: var(--bg);
+            cursor: pointer;
+            font-size: 0.85rem;
+            color: inherit;
+            font: inherit;
+            transition: all 0.2s;
+        }
+
+        .template-chip:hover {
+            border-color: var(--primary);
+        }
+
+        .template-chip:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
         }
 
         .receipts-gallery {
@@ -863,6 +948,7 @@
                     <button type="button" class="btn btn-secondary btn-sm" onclick="openReceiptModal()">📷 Скан чека</button>
                 </div>
                 <form id="expense-form">
+                    <div id="template-chips" class="template-chips"></div>
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="date">Дата</label>
@@ -1130,6 +1216,31 @@
                     </div>
                     <div class="btn-group">
                         <button type="submit" class="btn btn-primary" id="category-submit-btn">Добавить</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Шаблоны быстрых трат</div>
+                <div id="templates-list"></div>
+                <p class="hint">Кнопки-шаблоны появляются над формой добавления расхода — тап подставляет описание и категорию, чтобы не заполнять их вручную для типовых трат.</p>
+            </div>
+
+            <div class="card">
+                <div class="card-title">Добавить шаблон</div>
+                <form id="template-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="new-template-label">Название</label>
+                            <input type="text" id="new-template-label" placeholder="Например: Такси" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="new-template-category">Категория</label>
+                            <select id="new-template-category"></select>
+                        </div>
+                    </div>
+                    <div class="btn-group">
+                        <button type="submit" class="btn btn-primary" id="template-submit-btn">Добавить</button>
                     </div>
                 </form>
             </div>
@@ -1823,6 +1934,11 @@
 
         const DEFAULT_PARTICIPANTS = ['Тимур', 'Наташа', 'Андрей', 'Рома', 'Санёк'];
         const DEFAULT_CATEGORIES = ['Жильё', 'Транспорт', 'Еда', 'Развлечения', 'Прочее'];
+        const DEFAULT_TEMPLATES = [
+            { label: 'Такси', category: 'Транспорт' },
+            { label: 'Кафе', category: 'Еда' },
+            { label: 'Жильё', category: 'Жильё' }
+        ];
         const CHART_COLORS = ['#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed'];
         const TABS = ['expenses', 'personal', 'dashboard', 'summary', 'people', 'receipts'];
         const CACHE_KEY = 'trip-calc-cache-v1';
@@ -1837,6 +1953,7 @@
         let expenses = [];
         let personalExpenses = [];
         let settlements = [];
+        let expenseTemplates = [];
 
         let splitMode = 'equal';
         let editingExpenseId = null;
@@ -1872,6 +1989,7 @@
             expenses = [];
             personalExpenses = [];
             settlements = [];
+            expenseTemplates = [];
             if (!activeTripId) return;
             try {
                 const raw = localStorage.getItem(cacheKey());
@@ -1882,6 +2000,7 @@
                 expenses = cache.expenses || [];
                 personalExpenses = cache.personalExpenses || [];
                 settlements = cache.settlements || [];
+                expenseTemplates = cache.expenseTemplates || [];
             } catch (err) {
                 console.warn('Не удалось прочитать кэш:', err);
             }
@@ -1890,7 +2009,7 @@
         function saveCache() {
             if (!activeTripId) return;
             try {
-                localStorage.setItem(cacheKey(), JSON.stringify({ participants, categories, expenses, personalExpenses, settlements }));
+                localStorage.setItem(cacheKey(), JSON.stringify({ participants, categories, expenses, personalExpenses, settlements, expenseTemplates }));
             } catch (err) {
                 console.warn('Не удалось сохранить кэш:', err);
             }
@@ -1939,6 +2058,7 @@
             if (table === 'categories') return categories;
             if (table === 'settlements') return settlements;
             if (table === 'trips') return trips;
+            if (table === 'expense_templates') return expenseTemplates;
             return [];
         }
 
@@ -2039,12 +2159,13 @@
 
         async function fetchAll() {
             if (!activeTripId) return;
-            const [p, c, e, pe, s] = await Promise.all([
+            const [p, c, e, pe, s, et] = await Promise.all([
                 supabase.from('participants').select('*').eq('trip_id', activeTripId).order('sort_order', { ascending: true }),
                 supabase.from('categories').select('*').eq('trip_id', activeTripId).order('sort_order', { ascending: true }),
                 supabase.from('expenses').select('*').eq('trip_id', activeTripId).order('date', { ascending: false }),
                 supabase.from('personal_expenses').select('*').eq('trip_id', activeTripId).order('date', { ascending: false }),
-                supabase.from('settlements').select('*').eq('trip_id', activeTripId).order('date', { ascending: false })
+                supabase.from('settlements').select('*').eq('trip_id', activeTripId).order('date', { ascending: false }),
+                supabase.from('expense_templates').select('*').eq('trip_id', activeTripId).order('sort_order', { ascending: true })
             ]);
 
             if (e.error) throw e.error;
@@ -2064,6 +2185,12 @@
 
             if (!pe.error) personalExpenses = pe.data || [];
             if (!s.error) settlements = s.data || [];
+
+            if (!et.error && (et.data || []).length > 0) {
+                expenseTemplates = et.data;
+            } else if (expenseTemplates.length === 0) {
+                expenseTemplates = DEFAULT_TEMPLATES.map((t, i) => ({ id: 'default-tpl-' + i, label: t.label, category: t.category, sort_order: i }));
+            }
 
             if (!selectedPerson || !names().includes(selectedPerson)) {
                 selectedPerson = names()[0] || null;
@@ -2244,6 +2371,29 @@
             filterCategory.innerHTML = '<option value="">Все</option>' + options;
             filterCategory.value = list.includes(prevFilter) ? prevFilter : '';
         }
+
+        function renderTemplateChips() {
+            const container = document.getElementById('template-chips');
+            if (expenseTemplates.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            container.innerHTML = expenseTemplates.map(t => `
+                <button type="button" class="template-chip" onclick="applyTemplate('${t.id}')">${escapeHtml(t.label)}</button>
+            `).join('');
+        }
+
+        window.applyTemplate = function(id) {
+            const template = expenseTemplates.find(t => t.id === id);
+            if (!template) return;
+
+            document.getElementById('description').value = template.label;
+            const categorySelect = document.getElementById('category');
+            if (categoryNames().includes(template.category)) {
+                categorySelect.value = template.category;
+            }
+            document.getElementById('amount').focus();
+        };
 
         window.setSplitMode = function(mode) {
             splitMode = mode;
@@ -2933,11 +3083,28 @@
                 return;
             }
 
+            const person = participants.find(p => p.name === selectedPerson);
             const summary = computeCommonBalances();
             const personalTotal = personalExpenses
                 .filter(e => e.person === selectedPerson)
                 .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
             const commonShare = summary[selectedPerson] ? summary[selectedPerson].spent : 0;
+            const total = personalTotal + commonShare;
+            const budget = person && person.budget != null ? Number(person.budget) : null;
+
+            let budgetBarHtml = '';
+            if (budget != null && budget > 0) {
+                const rawPercent = (total / budget) * 100;
+                const overBudget = total > budget;
+                budgetBarHtml = `
+                    <div class="budget-bar-wrap">
+                        <div class="budget-bar">
+                            <div class="budget-bar-fill${overBudget ? ' over' : ''}" style="width: ${Math.min(100, rawPercent)}%"></div>
+                        </div>
+                        <div class="budget-bar-label">${overBudget ? 'Превышение' : 'Использовано'}: ${formatCurrency(total)} из ${formatCurrency(budget)} (${Math.round(rawPercent)}%)</div>
+                    </div>
+                `;
+            }
 
             grid.innerHTML = `
                 <div class="summary-item">
@@ -2952,11 +3119,48 @@
                     </div>
                     <div class="summary-item-row" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
                         <span>Итого:</span>
-                        <span class="amount">${formatCurrency(personalTotal + commonShare)}</span>
+                        <span class="amount">${formatCurrency(total)}</span>
+                    </div>
+                    ${budgetBarHtml}
+                    <div class="budget-edit-row">
+                        <label for="person-budget-input">Ожидаемый бюджет на поездку</label>
+                        <div class="budget-edit-controls">
+                            <input type="number" id="person-budget-input" step="0.01" min="0" placeholder="Не задан" value="${budget != null ? budget : ''}">
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="savePersonBudget()">Сохранить</button>
+                        </div>
                     </div>
                 </div>
             `;
         }
+
+        window.savePersonBudget = async function() {
+            if (!selectedPerson) return;
+            const person = participants.find(p => p.name === selectedPerson);
+            if (!person) return;
+
+            if (participantsAreLocalDefaults()) {
+                showAlert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
+                return;
+            }
+
+            const input = document.getElementById('person-budget-input');
+            const raw = input.value.trim();
+            const value = raw === '' ? null : Number(raw);
+            if (raw !== '' && (Number.isNaN(value) || value < 0)) {
+                showAlert('Введите корректную сумму бюджета.');
+                return;
+            }
+
+            try {
+                await dbUpdate('participants', person.id, { budget: value });
+                person.budget = value;
+                saveCache();
+                renderPersonalTotals();
+            } catch (err) {
+                console.error('Ошибка сохранения бюджета:', err);
+                showAlert('Не удалось сохранить бюджет. Убедитесь, что применена миграция supabase-schema-budget-templates.sql (колонка budget в participants).');
+            }
+        };
 
         // ============================================
         // Управление участниками
@@ -3470,6 +3674,128 @@
         };
 
         // ============================================
+        // Шаблоны быстрых трат
+        // ============================================
+
+        function templatesAreLocalDefaults() {
+            return expenseTemplates.some(t => String(t.id).startsWith('default-tpl-'));
+        }
+
+        function renderTemplates() {
+            const container = document.getElementById('templates-list');
+            const options = categoryNames().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+            container.innerHTML = expenseTemplates.map(t => `
+                <div class="people-row">
+                    <input type="text" value="${escapeHtml(t.label)}" data-template-id="${t.id}" class="template-label-input">
+                    <select data-template-id="${t.id}" class="template-category-select">${options}</select>
+                    <button class="btn btn-secondary btn-sm" onclick="renameTemplate('${t.id}')">Сохранить</button>
+                    <button class="btn btn-danger btn-sm" onclick="removeTemplate('${t.id}')">Удалить</button>
+                </div>
+            `).join('');
+            container.querySelectorAll('.template-category-select').forEach(sel => {
+                const t = expenseTemplates.find(x => x.id === sel.dataset.templateId);
+                if (t && categoryNames().includes(t.category)) sel.value = t.category;
+            });
+
+            const newCategorySelect = document.getElementById('new-template-category');
+            const prevNew = newCategorySelect.value;
+            newCategorySelect.innerHTML = options;
+            if (categoryNames().includes(prevNew)) newCategorySelect.value = prevNew;
+        }
+
+        document.getElementById('template-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const labelInput = document.getElementById('new-template-label');
+            const label = labelInput.value.trim();
+            const category = document.getElementById('new-template-category').value;
+            if (!label || !category) return;
+
+            if (expenseTemplates.some(t => t.label === label)) {
+                showAlert('Такой шаблон уже есть.');
+                return;
+            }
+
+            const btn = document.getElementById('template-submit-btn');
+            btn.disabled = true;
+
+            try {
+                const maxOrder = expenseTemplates.reduce((max, t) => Math.max(max, t.sort_order || 0), -1);
+                const created = await dbInsert('expense_templates', { label, category, sort_order: maxOrder + 1 });
+                expenseTemplates.push(created);
+                labelInput.value = '';
+                saveCache();
+                renderAll();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка добавления шаблона:', err);
+                showAlert('Не удалось добавить шаблон. Убедитесь, что применена миграция supabase-schema-budget-templates.sql (таблица expense_templates).');
+            }
+
+            btn.disabled = false;
+        });
+
+        window.renameTemplate = async function(id) {
+            const template = expenseTemplates.find(t => t.id === id);
+            const labelInput = document.querySelector(`.template-label-input[data-template-id="${id}"]`);
+            const categorySelect = document.querySelector(`.template-category-select[data-template-id="${id}"]`);
+            if (!template || !labelInput || !categorySelect) return;
+
+            const newLabel = labelInput.value.trim();
+            const newCategory = categorySelect.value;
+            if (!newLabel) {
+                labelInput.value = template.label;
+                return;
+            }
+            if (templatesAreLocalDefaults()) {
+                showAlert('Список шаблонов пока не хранится в базе. Выполните supabase-schema-budget-templates.sql в Supabase.');
+                labelInput.value = template.label;
+                return;
+            }
+            if (newLabel !== template.label && expenseTemplates.some(t => t.label === newLabel)) {
+                showAlert('Шаблон с таким названием уже есть.');
+                labelInput.value = template.label;
+                return;
+            }
+            if (newLabel === template.label && newCategory === template.category) return;
+
+            try {
+                await dbUpdate('expense_templates', id, { label: newLabel, category: newCategory });
+                template.label = newLabel;
+                template.category = newCategory;
+                saveCache();
+                renderAll();
+                updateStatus();
+            } catch (err) {
+                console.error('Ошибка изменения шаблона:', err);
+                showAlert('Не удалось сохранить шаблон.');
+                labelInput.value = template.label;
+            }
+        };
+
+        window.removeTemplate = function(id) {
+            const template = expenseTemplates.find(t => t.id === id);
+            if (!template) return;
+
+            if (templatesAreLocalDefaults()) {
+                showAlert('Список шаблонов пока не хранится в базе. Выполните supabase-schema-budget-templates.sql в Supabase.');
+                return;
+            }
+
+            askConfirm('Удалить шаблон?', `«${template.label}» будет удалён из списка быстрых кнопок.`, async () => {
+                try {
+                    await dbDelete('expense_templates', id);
+                    expenseTemplates = expenseTemplates.filter(t => t.id !== id);
+                    saveCache();
+                    renderAll();
+                    updateStatus();
+                } catch (err) {
+                    console.error('Ошибка удаления шаблона:', err);
+                    showAlert('Не удалось удалить шаблон.');
+                }
+            });
+        };
+
+        // ============================================
         // Дашборд
         // ============================================
 
@@ -3681,6 +4007,7 @@
             renderTripSwitcher();
             renderParticipantInputs();
             renderCategoryOptions();
+            renderTemplateChips();
             renderExpenses();
             if (currentTab === 'summary') updateSummary();
             if (currentTab === 'dashboard') updateDashboard();
@@ -3692,6 +4019,7 @@
             if (currentTab === 'people') {
                 renderPeople();
                 renderCategories();
+                renderTemplates();
                 renderTripsSettings();
             }
             if (currentTab === 'receipts') renderReceiptGallery();
@@ -3759,6 +4087,9 @@
             }
             if (categories.length === 0) {
                 categories = DEFAULT_CATEGORIES.map((name, i) => ({ id: 'default-cat-' + i, name, sort_order: i }));
+            }
+            if (expenseTemplates.length === 0) {
+                expenseTemplates = DEFAULT_TEMPLATES.map((t, i) => ({ id: 'default-tpl-' + i, label: t.label, category: t.category, sort_order: i }));
             }
             if (!selectedPerson) selectedPerson = names()[0] || null;
 
