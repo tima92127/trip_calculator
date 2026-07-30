@@ -243,12 +243,32 @@
         }
 
         th.sortable {
-            cursor: pointer;
-            user-select: none;
+            padding: 0;
         }
 
-        th.sortable:hover {
+        .th-sort-btn {
+            all: unset;
+            box-sizing: border-box;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+            padding: 12px;
+            cursor: pointer;
+            user-select: none;
+            font: inherit;
+            color: inherit;
+            text-transform: inherit;
+            letter-spacing: inherit;
+        }
+
+        .th-sort-btn:hover {
             color: var(--text);
+        }
+
+        .th-sort-btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: -2px;
         }
 
         td {
@@ -383,7 +403,14 @@
             cursor: pointer;
             text-align: center;
             transition: all 0.2s;
+            font: inherit;
             font-size: 0.85rem;
+            color: inherit;
+        }
+
+        .split-option:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
         }
 
         .split-option.active {
@@ -583,6 +610,23 @@
             flex-wrap: wrap;
         }
 
+        .debt-person-link {
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0;
+            font: inherit;
+            font-weight: 600;
+            color: inherit;
+            cursor: pointer;
+            text-decoration: underline dotted;
+        }
+
+        .debt-person-link:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
         .settlement-row {
             display: flex;
             align-items: center;
@@ -773,6 +817,10 @@
                 font-size: 0.8rem;
             }
 
+            .th-sort-btn {
+                padding: 8px 6px;
+            }
+
             .actions-cell {
                 flex-direction: column;
             }
@@ -789,7 +837,7 @@
             <h1>Калькулятор расходов</h1>
             <p class="subtitle">Распределяйте расходы поездки между участниками</p>
             <div class="trip-switcher">
-                <select id="trip-select" onchange="switchTrip(this.value)"></select>
+                <select id="trip-select" aria-label="Активная поездка" onchange="switchTrip(this.value)"></select>
                 <button type="button" class="btn btn-secondary btn-sm" onclick="promptNewTrip()">+ Поездка</button>
             </div>
         </header>
@@ -845,9 +893,9 @@
 
                     <div style="margin-top: 16px;">
                         <label style="font-size: 0.85rem; font-weight: 500; color: #6b7280;">Способ деления</label>
-                        <div class="split-options">
-                            <div class="split-option active" onclick="setSplitMode('equal')">Поровну</div>
-                            <div class="split-option" onclick="setSplitMode('manual')">Вручную</div>
+                        <div class="split-options" role="group" aria-label="Способ деления">
+                            <button type="button" class="split-option active" aria-pressed="true" onclick="setSplitMode('equal')">Поровну</button>
+                            <button type="button" class="split-option" aria-pressed="false" onclick="setSplitMode('manual')">Вручную</button>
                         </div>
                         <div id="manual-splits" class="manual-splits hidden"></div>
                     </div>
@@ -904,11 +952,11 @@
                     <table id="expenses-table">
                         <thead>
                             <tr>
-                                <th class="sortable" onclick="setSort('date')">Дата <span id="sort-date"></span></th>
-                                <th class="sortable" onclick="setSort('description')">Описание <span id="sort-description"></span></th>
-                                <th class="sortable" onclick="setSort('category')">Категория <span id="sort-category"></span></th>
-                                <th class="sortable" onclick="setSort('payer')">Платил <span id="sort-payer"></span></th>
-                                <th class="sortable" onclick="setSort('amount')">Сумма <span id="sort-amount"></span></th>
+                                <th class="sortable"><button type="button" class="th-sort-btn" onclick="setSort('date')">Дата <span id="sort-date"></span></button></th>
+                                <th class="sortable"><button type="button" class="th-sort-btn" onclick="setSort('description')">Описание <span id="sort-description"></span></button></th>
+                                <th class="sortable"><button type="button" class="th-sort-btn" onclick="setSort('category')">Категория <span id="sort-category"></span></button></th>
+                                <th class="sortable"><button type="button" class="th-sort-btn" onclick="setSort('payer')">Платил <span id="sort-payer"></span></button></th>
+                                <th class="sortable"><button type="button" class="th-sort-btn" onclick="setSort('amount')">Сумма <span id="sort-amount"></span></button></th>
                                 <th>Деление</th>
                                 <th></th>
                             </tr>
@@ -1120,8 +1168,8 @@
     </div>
 
     <div id="trip-picker-modal" class="delete-confirm hidden">
-        <div class="delete-confirm-content" style="text-align: left;">
-            <h3>Выберите поездку</h3>
+        <div class="delete-confirm-content" style="text-align: left;" role="dialog" aria-modal="true" aria-labelledby="trip-picker-title" tabindex="-1">
+            <h3 id="trip-picker-title">Выберите поездку</h3>
             <div id="trip-picker-list" style="display: flex; flex-direction: column; gap: 8px; margin: 12px 0;"></div>
             <p id="trip-picker-empty" class="hint hidden">Нет доступных поездок. Подключитесь к интернету, чтобы создать первую.</p>
             <form id="trip-picker-form" style="display: flex; gap: 8px; margin-top: 12px;">
@@ -1132,7 +1180,7 @@
     </div>
 
     <div id="delete-confirm" class="delete-confirm hidden">
-        <div class="delete-confirm-content">
+        <div class="delete-confirm-content" role="dialog" aria-modal="true" aria-labelledby="confirm-title" tabindex="-1">
             <h3 id="confirm-title">Удалить расход?</h3>
             <p id="confirm-text">Это действие нельзя отменить.</p>
             <div class="delete-confirm-actions">
@@ -1143,8 +1191,8 @@
     </div>
 
     <div id="receipt-modal" class="delete-confirm hidden">
-        <div class="delete-confirm-content" style="max-width: 720px; text-align: left; max-height: 85vh; overflow-y: auto;">
-            <h3 style="margin-bottom: 12px;">Скан чека</h3>
+        <div class="delete-confirm-content" style="max-width: 720px; text-align: left; max-height: 85vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="receipt-modal-title" tabindex="-1">
+            <h3 id="receipt-modal-title" style="margin-bottom: 12px;">Скан чека</h3>
 
             <div id="receipt-upload-step">
                 <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 0.9rem;">
@@ -1209,7 +1257,7 @@
     </div>
 
     <div id="balance-breakdown-modal" class="delete-confirm hidden">
-        <div class="delete-confirm-content" style="max-width: 640px; text-align: left; max-height: 85vh; overflow-y: auto;">
+        <div class="delete-confirm-content" style="max-width: 640px; text-align: left; max-height: 85vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="balance-breakdown-title" tabindex="-1">
             <h3 id="balance-breakdown-title" style="margin-bottom: 12px;"></h3>
             <div id="balance-breakdown-body"></div>
             <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: flex-end;">
@@ -1219,12 +1267,35 @@
     </div>
 
     <div id="receipt-photos-modal" class="delete-confirm hidden">
-        <div class="delete-confirm-content" style="max-width: 640px; text-align: left; max-height: 85vh; overflow-y: auto;">
-            <h3 style="margin-bottom: 12px;">Фото чека</h3>
+        <div class="delete-confirm-content" style="max-width: 640px; text-align: left; max-height: 85vh; overflow-y: auto;" role="dialog" aria-modal="true" aria-labelledby="receipt-photos-title" tabindex="-1">
+            <h3 id="receipt-photos-title" style="margin-bottom: 12px;">Фото чека</h3>
             <div id="receipt-photos-viewer" style="display: flex; flex-direction: column; gap: 12px;"></div>
             <div class="delete-confirm-actions" style="margin-top: 16px; justify-content: flex-end;">
                 <button type="button" class="btn btn-secondary" onclick="closeReceiptPhotosViewer()">Закрыть</button>
             </div>
+        </div>
+    </div>
+
+    <div id="message-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content" role="dialog" aria-modal="true" aria-labelledby="message-modal-title" tabindex="-1">
+            <h3 id="message-modal-title">Сообщение</h3>
+            <p id="message-modal-text"></p>
+            <div class="delete-confirm-actions">
+                <button type="button" class="btn btn-primary" onclick="closeMessageModal()">ОК</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="prompt-modal" class="delete-confirm hidden">
+        <div class="delete-confirm-content" style="text-align: left;" role="dialog" aria-modal="true" aria-labelledby="prompt-modal-title" tabindex="-1">
+            <h3 id="prompt-modal-title" style="margin-bottom: 12px;">Название новой поездки</h3>
+            <form id="prompt-modal-form">
+                <input type="text" id="prompt-modal-input" style="width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.95rem; margin-bottom: 16px;">
+                <div class="delete-confirm-actions">
+                    <button type="button" class="btn btn-secondary" onclick="cancelPromptModal()">Отмена</button>
+                    <button type="submit" class="btn btn-primary">Создать</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -1242,6 +1313,68 @@
         // не работал.
         const { createClient } = window.supabase;
         const Chart = window.Chart;
+
+        // ============================================
+        // Модальные окна: фокус-ловушка, Escape, возврат фокуса
+        // ============================================
+
+        const FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+        function getFocusableEls(container) {
+            return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR)).filter(el => el.offsetParent !== null);
+        }
+
+        function trapFocusKeydown(e, content, dismissable, onDismiss) {
+            if (e.key === 'Escape' && dismissable) {
+                e.preventDefault();
+                onDismiss();
+                return;
+            }
+            if (e.key !== 'Tab') return;
+            const focusable = getFocusableEls(content);
+            if (focusable.length === 0) return;
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            if (e.shiftKey && document.activeElement === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && document.activeElement === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        }
+
+        // Общая логика для всех .delete-confirm модалок: фокус переносится внутрь при
+        // открытии, Tab не выходит за пределы окна, Escape закрывает (если dismissable),
+        // фокус возвращается на элемент, с которого модалка была открыта.
+        function openModal(id, { dismissable = true, onDismiss } = {}) {
+            const el = document.getElementById(id);
+            const content = el.querySelector('.delete-confirm-content') || el;
+            const previousFocus = document.activeElement;
+            const dismiss = onDismiss || (() => closeModal(id));
+
+            el.classList.remove('hidden');
+
+            const keydownHandler = (e) => trapFocusKeydown(e, content, dismissable, dismiss);
+            el.addEventListener('keydown', keydownHandler);
+            el._modalState = { previousFocus, keydownHandler };
+
+            const focusable = getFocusableEls(content);
+            (focusable[0] || content).focus();
+        }
+
+        function closeModal(id) {
+            const el = document.getElementById(id);
+            el.classList.add('hidden');
+            const state = el._modalState;
+            if (state) {
+                el.removeEventListener('keydown', state.keydownHandler);
+                if (state.previousFocus && document.body.contains(state.previousFocus)) {
+                    state.previousFocus.focus();
+                }
+                el._modalState = null;
+            }
+        }
 
         // ============================================
         // Скан чека (распознавание текста на устройстве)
@@ -1327,7 +1460,6 @@
         window.openReceiptModal = function() {
             resetReceiptSession();
 
-            document.getElementById('receipt-modal').classList.remove('hidden');
             document.getElementById('receipt-upload-step').classList.remove('hidden');
             document.getElementById('receipt-progress').classList.add('hidden');
             document.getElementById('receipt-results').classList.add('hidden');
@@ -1344,10 +1476,12 @@
             const categorySelect = document.getElementById('receipt-category');
             categorySelect.innerHTML = categoryNames().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
             if (categoryNames().includes('Еда')) categorySelect.value = 'Еда';
+
+            openModal('receipt-modal', { onDismiss: window.closeReceiptModal });
         };
 
         window.closeReceiptModal = function() {
-            document.getElementById('receipt-modal').classList.add('hidden');
+            closeModal('receipt-modal');
             resetReceiptSession();
             renderReceiptPhotoThumbnails();
         };
@@ -1474,7 +1608,7 @@
                     <div class="receipt-item-main">
                         <input type="text" class="receipt-item-desc" data-index="${i}" value="${escapeHtml(c.text)}" placeholder="Описание">
                         <input type="number" step="0.01" min="0" class="receipt-item-amount" data-index="${i}" value="${c.amount}">
-                        <button type="button" class="btn btn-danger btn-sm" onclick="removeReceiptItem(${i})" title="Убрать эту позицию">✕</button>
+                        <button type="button" class="btn btn-danger btn-sm" onclick="removeReceiptItem(${i})" title="Убрать эту позицию" aria-label="Убрать эту позицию">✕</button>
                     </div>
                     <div class="receipt-item-participants">
                         ${participantNames.map(p => `
@@ -1506,7 +1640,7 @@
             strip.innerHTML = receiptSessionPhotos.map((p, i) => `
                 <div class="receipt-photo-thumb">
                     <img src="${p.previewUrl}" alt="Фото ${i + 1}">
-                    <button type="button" class="receipt-photo-remove" onclick="removeReceiptPhoto('${p.id}')" title="Убрать это фото">✕</button>
+                    <button type="button" class="receipt-photo-remove" onclick="removeReceiptPhoto('${p.id}')" title="Убрать фото ${i + 1}" aria-label="Убрать фото ${i + 1}">✕</button>
                 </div>
             `).join('');
         }
@@ -1625,11 +1759,11 @@
                 updateStatus();
                 closeReceiptModal();
                 if (photoUploadFailed) {
-                    alert('Расходы сохранены. Фото чека загрузить не удалось — проверьте соединение.');
+                    showAlert('Расходы сохранены. Фото чека загрузить не удалось — проверьте соединение.');
                 }
             } catch (err) {
                 console.error('Ошибка сохранения расходов из чека:', err);
-                alert('Не удалось сохранить часть расходов. Попробуйте ещё раз.');
+                showAlert('Не удалось сохранить часть расходов. Попробуйте ещё раз.');
                 btn.disabled = false;
                 btn.textContent = originalBtnText;
             }
@@ -1666,7 +1800,7 @@
                 addReceiptPhotoToSession(photoBlob, text);
             } catch (err) {
                 console.error('Ошибка распознавания чека:', err);
-                alert('Не удалось распознать чек. Попробуйте другое фото или введите данные вручную.');
+                showAlert('Не удалось распознать чек. Попробуйте другое фото или введите данные вручную.');
             } finally {
                 document.getElementById('receipt-progress').classList.add('hidden');
                 document.getElementById('receipt-upload-step').classList.remove('hidden');
@@ -2068,7 +2202,7 @@
 
             const payer = document.getElementById('payer');
             const prevPayer = payer.value;
-            payer.innerHTML = list.map(p => `<option value="${p}">${p}</option>`).join('');
+            payer.innerHTML = list.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
             if (list.includes(prevPayer)) payer.value = prevPayer;
 
             const checks = document.getElementById('participants-check');
@@ -2076,8 +2210,8 @@
             const isFirstRender = checks.children.length === 0;
             checks.innerHTML = list.map(p => `
                 <label class="participant-check">
-                    <input type="checkbox" name="participant" value="${p}" ${isFirstRender || previouslyChecked.has(p) ? 'checked' : ''}>
-                    <span>${p}</span>
+                    <input type="checkbox" name="participant" value="${escapeHtml(p)}" ${isFirstRender || previouslyChecked.has(p) ? 'checked' : ''}>
+                    <span>${escapeHtml(p)}</span>
                 </label>
             `).join('');
             checks.querySelectorAll('input[name="participant"]').forEach(cb => {
@@ -2088,13 +2222,13 @@
 
             const filterPayer = document.getElementById('filter-payer');
             const prevFilterPayer = filterPayer.value;
-            filterPayer.innerHTML = '<option value="">Все</option>' + list.map(p => `<option value="${p}">${p}</option>`).join('');
+            filterPayer.innerHTML = '<option value="">Все</option>' + list.map(p => `<option value="${escapeHtml(p)}">${escapeHtml(p)}</option>`).join('');
             filterPayer.value = list.includes(prevFilterPayer) ? prevFilterPayer : '';
         }
 
         function renderCategoryOptions() {
             const list = categoryNames();
-            const options = list.map(c => `<option value="${c}">${c}</option>`).join('');
+            const options = list.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
             const category = document.getElementById('category');
             const prev = category.value;
             category.innerHTML = options;
@@ -2114,7 +2248,9 @@
         window.setSplitMode = function(mode) {
             splitMode = mode;
             document.querySelectorAll('.split-option').forEach((el, i) => {
-                el.classList.toggle('active', (i === 0 && mode === 'equal') || (i === 1 && mode === 'manual'));
+                const isActive = (i === 0 && mode === 'equal') || (i === 1 && mode === 'manual');
+                el.classList.toggle('active', isActive);
+                el.setAttribute('aria-pressed', String(isActive));
             });
             document.getElementById('manual-splits').classList.toggle('hidden', mode === 'equal');
             if (mode === 'manual') renderManualSplits();
@@ -2125,8 +2261,8 @@
             const checked = getCheckedParticipants();
             container.innerHTML = checked.map(p => `
                 <div class="manual-split-row">
-                    <label>${p}</label>
-                    <input type="number" step="0.01" min="0" value="0" data-participant="${p}" class="manual-split-input">
+                    <label>${escapeHtml(p)}</label>
+                    <input type="number" step="0.01" min="0" value="0" data-participant="${escapeHtml(p)}" class="manual-split-input">
                     <span style="color: #6b7280;">₽</span>
                 </div>
             `).join('') + `
@@ -2166,7 +2302,7 @@
             const amount = parseFloat(document.getElementById('amount').value);
 
             if (chosen.length === 0) {
-                alert('Выберите хотя бы одного участника');
+                showAlert('Выберите хотя бы одного участника');
                 btn.disabled = false;
                 return;
             }
@@ -2181,7 +2317,7 @@
                 });
                 const total = Object.values(splits).reduce((a, b) => a + b, 0);
                 if (Math.abs(total - amount) > 0.01) {
-                    alert(`Сумма долей (${total.toFixed(2)}) не совпадает с суммой расхода (${amount.toFixed(2)})`);
+                    showAlert(`Сумма долей (${total.toFixed(2)}) не совпадает с суммой расхода (${amount.toFixed(2)})`);
                     btn.disabled = false;
                     return;
                 }
@@ -2214,7 +2350,7 @@
                 updateStatus();
             } catch (err) {
                 console.error('Ошибка сохранения:', err);
-                alert('Ошибка сохранения. Попробуйте ещё раз.');
+                showAlert('Ошибка сохранения. Попробуйте ещё раз.');
             }
 
             btn.disabled = false;
@@ -2278,7 +2414,7 @@
                     updateStatus();
                 } catch (err) {
                     console.error('Ошибка удаления:', err);
-                    alert('Не удалось удалить запись.');
+                    showAlert('Не удалось удалить запись.');
                 }
             });
         };
@@ -2373,16 +2509,16 @@
             tbody.innerHTML = list.map(exp => `
                 <tr>
                     <td>${formatDate(exp.date)}</td>
-                    <td>${exp.description}</td>
-                    <td>${exp.category}</td>
-                    <td>${exp.payer}</td>
+                    <td>${escapeHtml(exp.description)}</td>
+                    <td>${escapeHtml(exp.category)}</td>
+                    <td>${escapeHtml(exp.payer)}</td>
                     <td class="amount">${formatCurrency(exp.amount)}</td>
                     <td>${exp.split_mode === 'equal' ? 'Поровну' : 'Вручную'}</td>
                     <td>
                         <div class="actions-cell">
                             ${receiptPhotosButton(exp.receipt_photos)}
-                            <button class="btn btn-secondary btn-sm" onclick="editExpense('${exp.id}')">Изм.</button>
-                            <button class="btn btn-danger btn-sm" onclick="deleteExpense('${exp.id}')">Уд.</button>
+                            <button class="btn btn-secondary btn-sm" onclick="editExpense('${exp.id}')">Изменить</button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteExpense('${exp.id}')">Удалить</button>
                         </div>
                     </td>
                 </tr>
@@ -2408,7 +2544,7 @@
                     : '';
                 return `
                     <div class="summary-item">
-                        <div class="summary-item-name">${p}</div>
+                        <div class="summary-item-name">${escapeHtml(p)}</div>
                         <div class="summary-item-row">
                             <span>Оплатил:</span>
                             <span class="amount">${formatCurrency(s.paid)}</span>
@@ -2442,12 +2578,12 @@
 
             container.innerHTML = debts.map(d => `
                 <div class="debt-row">
-                    <span style="font-weight: 600; cursor: pointer; text-decoration: underline dotted;" onclick="openBalanceBreakdown('${encodeURIComponent(d.from)}')">${d.from}</span>
+                    <button type="button" class="debt-person-link" onclick="openBalanceBreakdown('${encodeURIComponent(d.from)}')">${escapeHtml(d.from)}</button>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2">
                         <line x1="5" y1="12" x2="19" y2="12"></line>
                         <polyline points="12 5 19 12 12 19"></polyline>
                     </svg>
-                    <span style="font-weight: 600; cursor: pointer; text-decoration: underline dotted;" onclick="openBalanceBreakdown('${encodeURIComponent(d.to)}')">${d.to}</span>
+                    <button type="button" class="debt-person-link" onclick="openBalanceBreakdown('${encodeURIComponent(d.to)}')">${escapeHtml(d.to)}</button>
                     <span style="margin-left: auto; font-weight: 600; color: #2563eb;">${formatCurrency(d.amount)}</span>
                     <button class="btn btn-success btn-sm" onclick="settleDebt('${encodeURIComponent(d.from)}', '${encodeURIComponent(d.to)}', ${d.amount.toFixed(2)})">Погасить</button>
                 </div>
@@ -2475,7 +2611,7 @@
                         updateStatus();
                     } catch (err) {
                         console.error('Ошибка сохранения взаиморасчёта:', err);
-                        alert('Не удалось сохранить взаиморасчёт. Убедитесь, что таблица settlements создана в Supabase.');
+                        showAlert('Не удалось сохранить взаиморасчёт. Убедитесь, что таблица settlements создана в Supabase.');
                     }
                 },
                 'Подтвердить'
@@ -2551,11 +2687,11 @@
                 </div>
             `;
 
-            document.getElementById('balance-breakdown-modal').classList.remove('hidden');
+            openModal('balance-breakdown-modal', { onDismiss: window.closeBalanceBreakdown });
         };
 
         window.closeBalanceBreakdown = function() {
-            document.getElementById('balance-breakdown-modal').classList.add('hidden');
+            closeModal('balance-breakdown-modal');
         };
 
         window.viewReceiptPhotos = function(urlsJsonEnc) {
@@ -2563,17 +2699,17 @@
             document.getElementById('receipt-photos-viewer').innerHTML = urls.map(u => `
                 <img src="${u}" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);">
             `).join('');
-            document.getElementById('receipt-photos-modal').classList.remove('hidden');
+            openModal('receipt-photos-modal', { onDismiss: window.closeReceiptPhotosViewer });
         };
 
         window.closeReceiptPhotosViewer = function() {
-            document.getElementById('receipt-photos-modal').classList.add('hidden');
+            closeModal('receipt-photos-modal');
         };
 
         function receiptPhotosButton(photos) {
             if (!photos || photos.length === 0) return '';
             const urlsEnc = encodeURIComponent(JSON.stringify(photos));
-            return `<button type="button" class="btn btn-secondary btn-sm" onclick="viewReceiptPhotos('${urlsEnc}')" title="Показать фото чека">🧾</button>`;
+            return `<button type="button" class="btn btn-secondary btn-sm" onclick="viewReceiptPhotos('${urlsEnc}')" title="Показать фото чека" aria-label="Показать фото чека">🧾</button>`;
         }
 
         // Расходы из одного скана чека делят один и тот же массив receipt_photos —
@@ -2631,11 +2767,11 @@
             container.innerHTML = settlements.map(s => `
                 <div class="settlement-row">
                     <span style="color: #6b7280;">${formatDate(s.date)}</span>
-                    <span style="font-weight: 600;">${s.from_person}</span>
+                    <span style="font-weight: 600;">${escapeHtml(s.from_person)}</span>
                     <span style="color: #6b7280;">→</span>
-                    <span style="font-weight: 600;">${s.to_person}</span>
+                    <span style="font-weight: 600;">${escapeHtml(s.to_person)}</span>
                     <span style="margin-left: auto; font-weight: 600; color: #059669;">${formatCurrency(s.amount)}</span>
-                    <button class="btn btn-danger btn-sm" onclick="deleteSettlement('${s.id}')">Уд.</button>
+                    <button class="btn btn-danger btn-sm" onclick="deleteSettlement('${s.id}')">Удалить</button>
                 </div>
             `).join('');
         }
@@ -2650,7 +2786,7 @@
                     updateStatus();
                 } catch (err) {
                     console.error('Ошибка удаления:', err);
-                    alert('Не удалось удалить запись.');
+                    showAlert('Не удалось удалить запись.');
                 }
             });
         };
@@ -2662,7 +2798,7 @@
         function renderPersonSelector() {
             const container = document.getElementById('person-select');
             container.innerHTML = names().map(p => `
-                <button type="button" class="${p === selectedPerson ? 'active' : ''}" onclick="selectPerson('${encodeURIComponent(p)}')">${p}</button>
+                <button type="button" class="${p === selectedPerson ? 'active' : ''}" onclick="selectPerson('${encodeURIComponent(p)}')">${escapeHtml(p)}</button>
             `).join('');
         }
 
@@ -2704,7 +2840,7 @@
                 updateStatus();
             } catch (err) {
                 console.error('Ошибка сохранения:', err);
-                alert('Ошибка сохранения. Убедитесь, что таблица personal_expenses создана в Supabase.');
+                showAlert('Ошибка сохранения. Убедитесь, что таблица personal_expenses создана в Supabase.');
             }
 
             btn.disabled = false;
@@ -2754,7 +2890,7 @@
                     updateStatus();
                 } catch (err) {
                     console.error('Ошибка удаления:', err);
-                    alert('Не удалось удалить запись.');
+                    showAlert('Не удалось удалить запись.');
                 }
             });
         };
@@ -2777,13 +2913,13 @@
             tbody.innerHTML = list.map(exp => `
                 <tr>
                     <td>${formatDate(exp.date)}</td>
-                    <td>${exp.description}</td>
-                    <td>${exp.category}</td>
+                    <td>${escapeHtml(exp.description)}</td>
+                    <td>${escapeHtml(exp.category)}</td>
                     <td class="amount">${formatCurrency(exp.amount)}</td>
                     <td>
                         <div class="actions-cell">
-                            <button class="btn btn-secondary btn-sm" onclick="editPersonalExpense('${exp.id}')">Изм.</button>
-                            <button class="btn btn-danger btn-sm" onclick="deletePersonalExpense('${exp.id}')">Уд.</button>
+                            <button class="btn btn-secondary btn-sm" onclick="editPersonalExpense('${exp.id}')">Изменить</button>
+                            <button class="btn btn-danger btn-sm" onclick="deletePersonalExpense('${exp.id}')">Удалить</button>
                         </div>
                     </td>
                 </tr>
@@ -2805,7 +2941,7 @@
 
             grid.innerHTML = `
                 <div class="summary-item">
-                    <div class="summary-item-name">${selectedPerson}</div>
+                    <div class="summary-item-name">${escapeHtml(selectedPerson)}</div>
                     <div class="summary-item-row">
                         <span>Личные траты:</span>
                         <span class="amount">${formatCurrency(personalTotal)}</span>
@@ -2841,7 +2977,7 @@
             const container = document.getElementById('people-list');
             container.innerHTML = participants.map(p => `
                 <div class="people-row">
-                    <input type="text" value="${p.name}" data-person-id="${p.id}" class="person-name-input">
+                    <input type="text" value="${escapeHtml(p.name)}" data-person-id="${p.id}" class="person-name-input">
                     <button class="btn btn-secondary btn-sm" onclick="renameParticipant('${p.id}')">Сохранить</button>
                     <button class="btn btn-danger btn-sm" onclick="removeParticipant('${p.id}')">Удалить</button>
                 </div>
@@ -2855,7 +2991,7 @@
             if (!name) return;
 
             if (names().includes(name)) {
-                alert('Такой участник уже есть.');
+                showAlert('Такой участник уже есть.');
                 return;
             }
 
@@ -2872,7 +3008,7 @@
                 updateStatus();
             } catch (err) {
                 console.error('Ошибка добавления участника:', err);
-                alert('Не удалось добавить участника. Убедитесь, что таблица participants создана в Supabase.');
+                showAlert('Не удалось добавить участника. Убедитесь, что таблица participants создана в Supabase.');
             }
 
             btn.disabled = false;
@@ -2888,12 +3024,12 @@
 
             if (!newName || newName === oldName) return;
             if (participantsAreLocalDefaults()) {
-                alert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
+                showAlert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
                 input.value = oldName;
                 return;
             }
             if (names().includes(newName)) {
-                alert('Участник с таким именем уже есть.');
+                showAlert('Участник с таким именем уже есть.');
                 input.value = oldName;
                 return;
             }
@@ -2944,7 +3080,7 @@
                 updateStatus();
             } catch (err) {
                 console.error('Ошибка переименования:', err);
-                alert('Не удалось переименовать участника.');
+                showAlert('Не удалось переименовать участника.');
                 input.value = oldName;
             }
         };
@@ -2954,18 +3090,18 @@
             if (!person) return;
 
             if (participantsAreLocalDefaults()) {
-                alert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
+                showAlert('Список участников пока не хранится в базе. Выполните supabase-schema.sql (таблица participants) в Supabase.');
                 return;
             }
 
             const usage = participantUsage(person.name);
             if (usage > 0) {
-                alert(`${person.name} участвует в ${usage} записях. Сначала удалите или измените эти записи.`);
+                showAlert(`${person.name} участвует в ${usage} записях. Сначала удалите или измените эти записи.`);
                 return;
             }
 
             if (participants.length <= 1) {
-                alert('Должен остаться хотя бы один участник.');
+                showAlert('Должен остаться хотя бы один участник.');
                 return;
             }
 
@@ -2979,7 +3115,7 @@
                     updateStatus();
                 } catch (err) {
                     console.error('Ошибка удаления участника:', err);
-                    alert('Не удалось удалить участника.');
+                    showAlert('Не удалось удалить участника.');
                 }
             });
         };
@@ -2991,7 +3127,7 @@
         function renderTripSwitcher() {
             const select = document.getElementById('trip-select');
             if (!select) return;
-            select.innerHTML = trips.map(t => `<option value="${t.id}" ${t.id === activeTripId ? 'selected' : ''}>${t.name}</option>`).join('');
+            select.innerHTML = trips.map(t => `<option value="${t.id}" ${t.id === activeTripId ? 'selected' : ''}>${escapeHtml(t.name)}</option>`).join('');
         }
 
         function renderTripsSettings() {
@@ -2999,7 +3135,7 @@
             if (!container) return;
             container.innerHTML = trips.map(t => `
                 <div class="people-row">
-                    <input type="text" value="${t.name}" data-trip-id="${t.id}" class="trip-name-input">
+                    <input type="text" value="${escapeHtml(t.name)}" data-trip-id="${t.id}" class="trip-name-input">
                     <button class="btn btn-secondary btn-sm" onclick="renameTrip('${t.id}')">Сохранить</button>
                     <button class="btn btn-danger btn-sm" onclick="removeTrip('${t.id}')" ${t.id === activeTripId ? 'disabled title="Сначала переключитесь на другую поездку"' : ''}>Удалить</button>
                 </div>
@@ -3034,18 +3170,18 @@
 
         window.promptNewTrip = async function() {
             if (!navigator.onLine) {
-                alert('Создание поездки недоступно офлайн — подключитесь к интернету.');
+                showAlert('Создание поездки недоступно офлайн — подключитесь к интернету.');
                 return;
             }
-            const name = prompt('Название новой поездки:');
-            if (!name || !name.trim()) return;
+            const name = await showPrompt('Название новой поездки');
+            if (!name) return;
             try {
-                const created = await createTrip(name.trim());
+                const created = await createTrip(name);
                 renderTripSwitcher();
                 await switchTrip(created.id);
             } catch (err) {
                 console.error('Ошибка создания поездки:', err);
-                alert('Не удалось создать поездку.');
+                showAlert('Не удалось создать поездку.');
             }
         };
 
@@ -3066,7 +3202,7 @@
                 renderTripsSettings();
             } catch (err) {
                 console.error('Ошибка переименования поездки:', err);
-                alert('Не удалось переименовать поездку.');
+                showAlert('Не удалось переименовать поездку.');
                 input.value = oldName;
             }
         };
@@ -3076,15 +3212,15 @@
             if (!trip) return;
 
             if (id === activeTripId) {
-                alert('Нельзя удалить текущую поездку. Сначала переключитесь на другую.');
+                showAlert('Нельзя удалить текущую поездку. Сначала переключитесь на другую.');
                 return;
             }
             if (trips.length <= 1) {
-                alert('Должна остаться хотя бы одна поездка.');
+                showAlert('Должна остаться хотя бы одна поездка.');
                 return;
             }
             if (!navigator.onLine) {
-                alert('Удаление поездки недоступно офлайн — подключитесь к интернету.');
+                showAlert('Удаление поездки недоступно офлайн — подключитесь к интернету.');
                 return;
             }
 
@@ -3097,14 +3233,13 @@
                     renderTripsSettings();
                 } catch (err) {
                     console.error('Ошибка удаления поездки:', err);
-                    alert('Не удалось удалить поездку.');
+                    showAlert('Не удалось удалить поездку.');
                 }
             });
         };
 
         function showTripPicker() {
             return new Promise((resolve) => {
-                const modal = document.getElementById('trip-picker-modal');
                 const list = document.getElementById('trip-picker-list');
                 const emptyMsg = document.getElementById('trip-picker-empty');
                 const form = document.getElementById('trip-picker-form');
@@ -3120,12 +3255,12 @@
                 function finish(id) {
                     form.onsubmit = null;
                     window.removeEventListener('online', handleOnline);
-                    modal.classList.add('hidden');
+                    closeModal('trip-picker-modal');
                     resolve(id);
                 }
 
                 function renderList() {
-                    list.innerHTML = trips.map(t => `<button type="button" class="btn btn-secondary" data-trip-id="${t.id}">${t.name}</button>`).join('');
+                    list.innerHTML = trips.map(t => `<button type="button" class="btn btn-secondary" data-trip-id="${t.id}">${escapeHtml(t.name)}</button>`).join('');
                     emptyMsg.classList.toggle('hidden', trips.length > 0 || navigator.onLine);
                     list.querySelectorAll('button[data-trip-id]').forEach(btn => {
                         btn.onclick = () => finish(btn.dataset.tripId);
@@ -3137,7 +3272,7 @@
                     const name = input.value.trim();
                     if (!name) return;
                     if (!navigator.onLine) {
-                        alert('Создание поездки недоступно офлайн — подключитесь к интернету.');
+                        showAlert('Создание поездки недоступно офлайн — подключитесь к интернету.');
                         return;
                     }
                     try {
@@ -3145,13 +3280,14 @@
                         finish(created.id);
                     } catch (err) {
                         console.error('Ошибка создания поездки:', err);
-                        alert('Не удалось создать поездку.');
+                        showAlert('Не удалось создать поездку.');
                     }
                 };
 
                 window.addEventListener('online', handleOnline);
                 renderList();
-                modal.classList.remove('hidden');
+                // Поездка обязательна для работы приложения — окно нельзя закрыть по Escape без выбора.
+                openModal('trip-picker-modal', { dismissable: false });
             });
         }
 
@@ -3187,7 +3323,7 @@
             const container = document.getElementById('categories-list');
             container.innerHTML = categories.map(c => `
                 <div class="people-row">
-                    <input type="text" value="${c.name}" data-category-id="${c.id}" class="category-name-input">
+                    <input type="text" value="${escapeHtml(c.name)}" data-category-id="${c.id}" class="category-name-input">
                     <button class="btn btn-secondary btn-sm" onclick="renameCategory('${c.id}')">Сохранить</button>
                     <button class="btn btn-danger btn-sm" onclick="removeCategory('${c.id}')">Удалить</button>
                 </div>
@@ -3201,7 +3337,7 @@
             if (!name) return;
 
             if (categoryNames().includes(name)) {
-                alert('Такая категория уже есть.');
+                showAlert('Такая категория уже есть.');
                 return;
             }
 
@@ -3218,7 +3354,7 @@
                 updateStatus();
             } catch (err) {
                 console.error('Ошибка добавления категории:', err);
-                alert('Не удалось добавить категорию. Убедитесь, что таблица categories создана в Supabase.');
+                showAlert('Не удалось добавить категорию. Убедитесь, что таблица categories создана в Supabase.');
             }
 
             btn.disabled = false;
@@ -3231,7 +3367,7 @@
             if (!name) return;
 
             if (!navigator.onLine) {
-                alert('Создание поездки недоступно офлайн — подключитесь к интернету.');
+                showAlert('Создание поездки недоступно офлайн — подключитесь к интернету.');
                 return;
             }
 
@@ -3245,7 +3381,7 @@
                 renderTripsSettings();
             } catch (err) {
                 console.error('Ошибка добавления поездки:', err);
-                alert('Не удалось добавить поездку.');
+                showAlert('Не удалось добавить поездку.');
             }
 
             btn.disabled = false;
@@ -3261,12 +3397,12 @@
 
             if (!newName || newName === oldName) return;
             if (categoriesAreLocalDefaults()) {
-                alert('Список категорий пока не хранится в базе. Выполните supabase-schema.sql (таблица categories) в Supabase.');
+                showAlert('Список категорий пока не хранится в базе. Выполните supabase-schema.sql (таблица categories) в Supabase.');
                 input.value = oldName;
                 return;
             }
             if (categoryNames().includes(newName)) {
-                alert('Категория с таким именем уже есть.');
+                showAlert('Категория с таким именем уже есть.');
                 input.value = oldName;
                 return;
             }
@@ -3294,7 +3430,7 @@
                 updateStatus();
             } catch (err) {
                 console.error('Ошибка переименования категории:', err);
-                alert('Не удалось переименовать категорию.');
+                showAlert('Не удалось переименовать категорию.');
                 input.value = oldName;
             }
         };
@@ -3304,18 +3440,18 @@
             if (!category) return;
 
             if (categoriesAreLocalDefaults()) {
-                alert('Список категорий пока не хранится в базе. Выполните supabase-schema.sql (таблица categories) в Supabase.');
+                showAlert('Список категорий пока не хранится в базе. Выполните supabase-schema.sql (таблица categories) в Supabase.');
                 return;
             }
 
             const usage = categoryUsage(category.name);
             if (usage > 0) {
-                alert(`Категория «${category.name}» используется в ${usage} записях. Сначала измените их категорию.`);
+                showAlert(`Категория «${category.name}» используется в ${usage} записях. Сначала измените их категорию.`);
                 return;
             }
 
             if (categories.length <= 1) {
-                alert('Должна остаться хотя бы одна категория.');
+                showAlert('Должна остаться хотя бы одна категория.');
                 return;
             }
 
@@ -3328,7 +3464,7 @@
                     updateStatus();
                 } catch (err) {
                     console.error('Ошибка удаления категории:', err);
-                    alert('Не удалось удалить категорию.');
+                    showAlert('Не удалось удалить категорию.');
                 }
             });
         };
@@ -3384,9 +3520,9 @@
             const list = names();
             const totalCredit = list.reduce((sum, p) => sum + Math.max(summary[p].balance, 0), 0);
 
-            let html = '<thead><tr><th></th>' + list.map(p => `<th>${p}</th>`).join('') + '</tr></thead><tbody>';
+            let html = '<thead><tr><th></th>' + list.map(p => `<th>${escapeHtml(p)}</th>`).join('') + '</tr></thead><tbody>';
             list.forEach(debtor => {
-                html += `<tr><th>${debtor}</th>`;
+                html += `<tr><th>${escapeHtml(debtor)}</th>`;
                 list.forEach(creditor => {
                     const isDebtor = summary[debtor].balance < -0.01;
                     const isCreditor = summary[creditor].balance > 0.01;
@@ -3475,19 +3611,59 @@
             document.getElementById('confirm-text').textContent = text;
             document.querySelector('.delete-confirm-actions .btn-danger').textContent = okLabel || 'Удалить';
             confirmAction = onConfirm;
-            document.getElementById('delete-confirm').classList.remove('hidden');
+            openModal('delete-confirm', { onDismiss: window.confirmNo });
         }
 
         window.confirmYes = async function() {
             const action = confirmAction;
             confirmAction = null;
-            document.getElementById('delete-confirm').classList.add('hidden');
+            closeModal('delete-confirm');
             if (action) await action();
         };
 
         window.confirmNo = function() {
             confirmAction = null;
-            document.getElementById('delete-confirm').classList.add('hidden');
+            closeModal('delete-confirm');
+        };
+
+        // Замена нативного showAlert(): не блокирует страницу и выглядит как остальные модалки.
+        function showAlert(message, title) {
+            document.getElementById('message-modal-title').textContent = title || 'Сообщение';
+            document.getElementById('message-modal-text').textContent = message;
+            openModal('message-modal', { onDismiss: window.closeMessageModal });
+        }
+
+        window.closeMessageModal = function() {
+            closeModal('message-modal');
+        };
+
+        // Замена нативного prompt(): возвращает Promise<string|null>, как и window.prompt.
+        let promptResolve = null;
+
+        function showPrompt(title) {
+            return new Promise((resolve) => {
+                promptResolve = resolve;
+                document.getElementById('prompt-modal-title').textContent = title;
+                document.getElementById('prompt-modal-input').value = '';
+                openModal('prompt-modal', { onDismiss: () => finishPrompt(null) });
+            });
+        }
+
+        function finishPrompt(value) {
+            const resolve = promptResolve;
+            promptResolve = null;
+            closeModal('prompt-modal');
+            if (resolve) resolve(value);
+        }
+
+        document.getElementById('prompt-modal-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const value = document.getElementById('prompt-modal-input').value.trim();
+            finishPrompt(value || null);
+        });
+
+        window.cancelPromptModal = function() {
+            finishPrompt(null);
         };
 
         window.showTab = function(tab) {
