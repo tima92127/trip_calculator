@@ -1517,6 +1517,11 @@
             return totals.length > 0 ? totals.reduce((a, b) => a + b, 0) : null;
         }
 
+        // Скидки на чек (строка «Скидка 10% -440.00») со всех фото сеанса.
+        function getReceiptDetectedDiscount() {
+            return receiptSessionPhotos.reduce((s, p) => s + (p.detectedDiscount || 0), 0);
+        }
+
         function escapeHtml(str) {
             const div = document.createElement('div');
             div.textContent = str;
@@ -1618,8 +1623,22 @@
             renderReceiptPhotoThumbnails();
         };
 
-        // Строка чека вида "... 150.00" — сумма в конце строки (не обязательно вся строка).
-        const TRAILING_AMOUNT_RE = /(\d[\d ]*)[.,](\d{2})\s*(?:₽|руб\.?|р\.?)?\s*$/i;
+        // Строка чека вида "... 150.00" — сумма в конце строки (не обязательно вся
+        // строка). Пробел после разделителя ("4 480, 00") и обрывок рамки чека в самом
+        // конце строки ("4 480,00 |") — обычные артефакты распознавания.
+        // Число должно начинаться с начала строки или после нецифрового символа, иначе
+        // в строке "Кофе 150.00 300.00" суммой станет обрубок "00 300.00", а в названии
+        // останется хвост предыдущего числа.
+        const TRAILING_AMOUNT_RE = /(?:^|[^\d.,])(\d[\d ]*)[.,] ?(\d{2})\s*(?:₽|руб\.?|р\.?)?\s*[|\\\/\]]?\s*$/i;
+
+        // Строка позиции с отдельной колонкой количества: "Салат модена 2 640,00",
+        // "1.0 4 199.00". Количество считаем только целым (в том числе записанным как
+        // "1.0"): дробное число перед суммой — часть названия, а не количество
+        // ("Кока-кола 0,5 2 240,00" — это 0,5 л, 2 шт, 240 ₽). Сумма может быть
+        // записана с разделителем тысяч ("Фанагория 3 2 100,00" — 3 шт на 2100 ₽);
+        // ленивое начало разбирает такую строку правильно, потому что количество
+        // ищется как можно ближе к началу.
+        const QTY_COLUMN_RE = /^(.*?)(?:^|\s)(\d{1,3}(?:[.,]0+)?)\s+((?:\d{1,3}(?: \d{3})+|\d+)[.,] ?\d{2})\s*[|\\\/\]]?\s*$/;
 
         // Строка позиции вида "160.00 * 1шт. = 160.00": цена, количество и сумма.
         // Хвост после "=" распознаётся хуже всего (упирается в край чека, сливается с
@@ -1664,6 +1683,36 @@
             return pq && amount < pq.price ? pq.value : amount;
         }
 
+        // Разбор строки позиции: сумма, название без колонки количества и признак того,
+        // что количество в строке нашлось. Строка с количеством — это точно строка
+        // позиции, а не служебное число рядом с ней (в чеке DNS сразу под суммой
+        // позиции идёт отдельной строкой сумма НДС по ней же).
+        function parseItemLine(line, trailingMatch, useQtyColumn) {
+            const amount = parseAmountMatch(trailingMatch);
+            if (amount === null) return null;
+
+            // У служебных строк колонки количества нет, а первая цифра суммы легко
+            // сходит за него: «ИТОГО К ОПЛАТЕ: 4 480,00» — это 4480 ₽, а не 4 штуки
+            // по 480 ₽. Поэтому сумму таких строк читаем как есть.
+            const plainDesc = line.slice(0, trailingMatch.index).trim();
+            if (isReceiptServiceLine(plainDesc)) {
+                return { amount, desc: plainDesc, hasQty: false };
+            }
+
+            const pq = line.match(PRICE_QTY_RE);
+            if (pq) {
+                return { amount: reconcileAmount(line, amount), desc: line.slice(0, pq.index).trim(), hasQty: true };
+            }
+
+            const qtyCol = useQtyColumn ? line.match(QTY_COLUMN_RE) : null;
+            const columnAmount = qtyCol ? parseAmountFromString(qtyCol[3]) : null;
+            if (columnAmount !== null) {
+                return { amount: columnAmount, desc: qtyCol[1].trim(), hasQty: true };
+            }
+
+            return { amount, desc: line.slice(0, trailingMatch.index).trim(), hasQty: false };
+        }
+
         // Короткие обрывки вроде "1шт." (а после распознавания — "1ШT.", "10T.")
         // не годятся в название позиции: считаем текст содержательным по числу букв.
         function isMeaningfulText(str) {
@@ -1683,7 +1732,14 @@
         // Итоговая строка чека — не позиция, а сумма для сверки с суммой позиций.
         // \b не подходит: граница слова в JS-регэкспах определяется по [A-Za-z0-9_],
         // кириллица в него не входит, поэтому \b после кириллической буквы не сработает.
-        const RECEIPT_TOTAL_RE = /^(итого?|всего|к\s*оплате)(?=\s|$)/i;
+        // Двоеточие после слова («Всего:», «ИТОГО К ОПЛАТЕ:») встречается не реже
+        // пробела, поэтому в границе слова оно тоже допускается.
+        // "ИТОГО БЕЗ НДС" — не итог чека, а служебная строка, поэтому "без" исключается.
+        const RECEIPT_TOTAL_RE = /^(итого?|всего|сумма\s*к\s*оплате|к\s*оплате)(?![\s:.]*[бв]ез)(?=[\s:.]|$)/i;
+
+        // Строка скидки — не позиция, но и не мусор: на неё расходится сумма позиций
+        // с итогом чека, поэтому её сумму запоминаем для сверки.
+        const RECEIPT_DISCOUNT_RE = /^(скидка|скидки|дисконт)(?=[\s:.]|$)/i;
 
         // Служебные строки внизу чека (способ оплаты, НДС, сдача и т.п.) — технически
         // выглядят как "текст + сумма в конце строки", как и обычная позиция, поэтому
@@ -1691,12 +1747,14 @@
         // "СУММА БЕЗ ..." — одним шаблоном на "БЕЗ НДС", "БЕЗ НАЛОГА" и на варианты,
         // где само "НДС" распозналось с ошибками.
         const RECEIPT_NON_ITEM_RE = new RegExp('^(' + [
-            // "БЕЗ" после латинизации даёт "ВЕЗ" (латинская B — двойник и Б, и В),
-            // поэтому допускаем обе первые буквы.
-            'сумма\\s*[бв]ез\\s*\\S+',
-            'сумма\\s*(с\\s*)?ндс',
+            // Любая «СУММА …», кроме «суммы к оплате» (её ловит RECEIPT_TOTAL_RE
+            // раньше): и «СУММА НДС», и «СУММА БЕЗ НДС», и «Сумма (Руб)» из чека
+            // платёжного терминала — названием товара это слово не бывает.
+            'сумма',
             'ндс(\\s*\\d+\\s*%?)?',
             'в\\s*т\\.?\\s*ч\\.?\\s*ндс',
+            // "БЕЗ" после латинизации даёт "ВЕЗ" (латинская B — двойник и Б, и В),
+            // поэтому допускаем обе первые буквы.
             '[бв]ез\\s*ндс',
             'наличными',
             'безналичными',
@@ -1707,11 +1765,15 @@
             'постоплата',
             'встречным\\s*предоставлением',
             'округление',
-            'скидка',
             'бонус\\w*',
             'оплачено',
             'внесено',
-        ].join('|') + ')(?=\\s|$)', 'i');
+            'комиссия',
+            'оплата(\\s*картой)?',
+            '(банковской\\s*)?картой',
+            'рубли',
+            'итого\\s*без',
+        ].join('|') + ')(?=[\\s:.(]|$)', 'i');
 
         function isReceiptTotalLine(desc) {
             return RECEIPT_TOTAL_RE.test(normalizeForMatch(desc));
@@ -1719,6 +1781,14 @@
 
         function isReceiptNonItemLine(desc) {
             return RECEIPT_NON_ITEM_RE.test(normalizeForMatch(desc));
+        }
+
+        function isReceiptDiscountLine(desc) {
+            return RECEIPT_DISCOUNT_RE.test(normalizeForMatch(desc));
+        }
+
+        function isReceiptServiceLine(desc) {
+            return !!desc && (isReceiptTotalLine(desc) || isReceiptDiscountLine(desc) || isReceiptNonItemLine(desc));
         }
 
         // Одна позиция чека часто занимает две строки: название и следом "цена × кол-во
@@ -1746,6 +1816,7 @@
             // следующая сумма с тем же названием относится к той же покупке.
             let contextUsed = false;
             let total = null;
+            let discount = 0;
 
             for (const line of lines) {
                 const cells = line.split('\t').map(c => c.trim()).filter(Boolean);
@@ -1772,6 +1843,11 @@
                     contextDesc = '';
                     continue;
                 }
+                if (isReceiptDiscountLine(desc)) {
+                    discount += amount;
+                    contextDesc = '';
+                    continue;
+                }
                 if (isReceiptNonItemLine(desc)) {
                     contextDesc = '';
                     continue;
@@ -1786,18 +1862,44 @@
                 contextUsed = true;
                 results.push({ text: contextDesc || lastCell, amount, fresh });
             }
-            return { items: dedupeCandidates(results), total };
+            return { items: dedupeCandidates(results), total, discount };
+        }
+
+        // "Салат модена 2 640,00" (2 шт на 640 ₽) и "Ноутбук 54 990.00" (одна позиция
+        // за 54 990 ₽) в тексте выглядят одинаково: число, пробел, сумма. Отличить их
+        // по самой строке нельзя, поэтому чек разбирается дважды — с колонкой
+        // количества и без неё — и выигрывает тот вариант, у которого сумма позиций
+        // сошлась с итогом чека. Если не сошлось ни в одном (или итог не распознан),
+        // ориентируемся на шапку таблицы: "Кол-во" в чеке означает, что колонка есть.
+        function extractAmountCandidatesPlain(text) {
+            const withQty = parsePlainLines(text, true);
+            const withoutQty = parsePlainLines(text, false);
+            if (matchesDetectedTotal(withQty) !== matchesDetectedTotal(withoutQty)) {
+                return matchesDetectedTotal(withQty) ? withQty : withoutQty;
+            }
+            return /КОЛ[-.\s]*ВО|КОЛИЧЕСТВО/.test(normalizeForMatch(text)) ? withQty : withoutQty;
+        }
+
+        function matchesDetectedTotal({ items, total, discount }) {
+            if (total == null) return false;
+            const sum = items.reduce((s, i) => s + i.amount, 0);
+            return Math.abs(Math.round((sum - discount - total) * 100) / 100) < 0.01;
         }
 
         // Обычный текст (локальный Tesseract или облако без табличной разметки):
         // позиция и сумма либо на одной строке ("Кофе  150.00"), либо сумма идёт
         // отдельной строкой после названия — берём последнюю сумму перед следующей позицией.
-        function extractAmountCandidatesPlain(text) {
+        function parsePlainLines(text, useQtyColumn) {
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
             const results = [];
             let currentDesc = null;
             let lastAmount = null;
+            // Сумма из строки с количеством — это точно сумма позиции, поэтому идущие
+            // следом безымянные числа (в чеке DNS — сумма НДС по той же позиции) её
+            // больше не перебивают.
+            let lastAmountFixed = false;
             let total = null;
+            let discount = 0;
             // "ИТОГ" встретилась отдельной строкой, без суммы на ней самой — сумма
             // придёт следующей строкой, её нужно перехватить как total, а не как lastAmount.
             let awaitingTotalAmount = false;
@@ -1808,19 +1910,15 @@
                 }
                 currentDesc = null;
                 lastAmount = null;
+                lastAmountFixed = false;
             };
 
             for (const line of lines) {
                 const m = line.match(TRAILING_AMOUNT_RE);
                 if (m) {
-                    const parsed = parseAmountMatch(m);
-                    if (parsed === null) continue;
-                    const amount = reconcileAmount(line, parsed);
-                    // Название позиции — всё до расчёта "цена × кол-во": если и название,
-                    // и расчёт оказались на одной строке, в описание должно попасть
-                    // только название, а не "морс 160.00 * 1шт. =".
-                    const pq = line.match(PRICE_QTY_RE);
-                    const prefix = line.slice(0, pq ? pq.index : m.index).trim();
+                    const parsedLine = parseItemLine(line, m, useQtyColumn);
+                    if (parsedLine === null) continue;
+                    const { amount, desc: prefix, hasQty } = parsedLine;
 
                     if (awaitingTotalAmount && !prefix) {
                         total = amount;
@@ -1834,6 +1932,11 @@
                         total = amount;
                         continue;
                     }
+                    if (prefix && isReceiptDiscountLine(prefix)) {
+                        flush();
+                        discount += amount;
+                        continue;
+                    }
                     if (prefix && isReceiptNonItemLine(prefix)) {
                         flush();
                         continue;
@@ -1842,8 +1945,9 @@
                     if (prefix && isMeaningfulText(prefix)) {
                         flush();
                         results.push({ text: prefix, amount, fresh: true });
-                    } else {
+                    } else if (!lastAmountFixed || hasQty) {
                         lastAmount = amount;
+                        lastAmountFixed = hasQty;
                     }
                     continue;
                 }
@@ -1866,7 +1970,7 @@
                 currentDesc = line;
             }
             flush();
-            return { items: dedupeCandidates(results), total };
+            return { items: dedupeCandidates(results), total, discount };
         }
 
         function extractAmountCandidates(text) {
@@ -1889,10 +1993,18 @@
                 .map(el => parseFloat(el.value))
                 .filter(v => Number.isFinite(v))
                 .reduce((s, v) => s + v, 0);
-            const diff = Math.round((sum - total) * 100) / 100;
-            container.innerHTML = Math.abs(diff) < 0.01
-                ? `<p class="receipt-total-hint ok">Сумма позиций совпадает с итогом чека: ${formatCurrency(sum)}.</p>`
-                : `<p class="receipt-total-hint mismatch">⚠ Сумма позиций (${formatCurrency(sum)}) расходится с итогом чека (${formatCurrency(total)}) на ${formatCurrency(Math.abs(diff))} — проверьте, не пропущена ли или не лишняя ли позиция.</p>`;
+            // Скидка на чек указана отдельной строкой и в позиции не входит, поэтому
+            // без её учёта сумма позиций «расходится» с итогом на ровном месте.
+            const discount = getReceiptDetectedDiscount();
+            const diff = Math.round((sum - discount - total) * 100) / 100;
+
+            if (Math.abs(diff) >= 0.01) {
+                container.innerHTML = `<p class="receipt-total-hint mismatch">⚠ Сумма позиций (${formatCurrency(sum)}) расходится с итогом чека (${formatCurrency(total)}) на ${formatCurrency(Math.abs(diff))} — проверьте, не пропущена ли или не лишняя ли позиция.</p>`;
+                return;
+            }
+            container.innerHTML = discount > 0
+                ? `<p class="receipt-total-hint ok">Сумма позиций (${formatCurrency(sum)}) сходится с итогом чека (${formatCurrency(total)}) с учётом скидки ${formatCurrency(discount)}. Расходы добавятся без скидки — поправьте суммы, если делить нужно уже со скидкой.</p>`
+                : `<p class="receipt-total-hint ok">Сумма позиций совпадает с итогом чека: ${formatCurrency(sum)}.</p>`;
         }
 
         function renderReceiptItems() {
@@ -1974,8 +2086,8 @@
 
         function addReceiptPhotoToSession(blob, text) {
             const photoId = crypto.randomUUID();
-            const { items, total } = extractAmountCandidates(text);
-            receiptSessionPhotos.push({ id: photoId, blob, previewUrl: URL.createObjectURL(blob), detectedTotal: total });
+            const { items, total, discount } = extractAmountCandidates(text);
+            receiptSessionPhotos.push({ id: photoId, blob, previewUrl: URL.createObjectURL(blob), detectedTotal: total, detectedDiscount: discount });
 
             const newItems = items.map(c => ({ ...c, photoId }));
             receiptCandidates = receiptCandidates.concat(newItems);
