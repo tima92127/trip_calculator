@@ -1621,6 +1621,13 @@
         // Строка чека вида "... 150.00" — сумма в конце строки (не обязательно вся строка).
         const TRAILING_AMOUNT_RE = /(\d[\d ]*)[.,](\d{2})\s*(?:₽|руб\.?|р\.?)?\s*$/i;
 
+        // Строка позиции вида "160.00 * 1шт. = 160.00": цена, количество и сумма.
+        // Хвост после "=" распознаётся хуже всего (упирается в край чека, сливается с
+        // пунктиром-разделителем), поэтому сумму пересчитываем как цена × количество:
+        // если результат расходится с распознанным хвостом, верить нужно расчёту, иначе
+        // в позицию попадает мусорное число вроде "1.00" вместо реальных 160 ₽.
+        const PRICE_QTY_RE = /(\d[\d ]*[.,]\d{2})\s*[*xх×]\s*(\d+(?:[.,]\d+)?)\s*(?:шт|кг|л|г)/i;
+
         function parseAmountMatch(m) {
             const value = parseFloat(`${m[1].replace(/\s/g, '')}.${m[2]}`);
             return Number.isFinite(value) && value > 0 && value <= 1000000 ? value : null;
@@ -1631,27 +1638,101 @@
             return m ? parseAmountMatch(m) : null;
         }
 
+        function parseDecimal(str) {
+            const value = parseFloat(str.replace(/\s/g, '').replace(',', '.'));
+            return Number.isFinite(value) ? value : null;
+        }
+
+        // Цена и количество из строки "160.00 * 1шт. = ..." — null, если строка не в
+        // этом формате или числа неправдоподобны.
+        function parsePriceQty(line) {
+            const m = line.match(PRICE_QTY_RE);
+            if (!m) return null;
+            const price = parseDecimal(m[1]);
+            const qty = parseDecimal(m[2]);
+            if (price == null || qty == null || price <= 0 || qty <= 0 || qty > 1000) return null;
+            const value = Math.round(price * qty * 100) / 100;
+            return value > 0 && value <= 1000000 ? { price, value } : null;
+        }
+
+        // Сумма позиции: обычно это распознанный хвост строки, но если он меньше цены
+        // одной штуки — такого на чеке быть не может, значит хвост «съеден» при
+        // распознавании, и сумму берём из расчёта цена × количество. Хвост больше
+        // расчётного не трогаем: там может быть скидка или ошибка в количестве.
+        function reconcileAmount(line, amount) {
+            const pq = parsePriceQty(line);
+            return pq && amount < pq.price ? pq.value : amount;
+        }
+
         // Короткие обрывки вроде "1шт." (а после распознавания — "1ШT.", "10T.")
         // не годятся в название позиции: считаем текст содержательным по числу букв.
         function isMeaningfulText(str) {
             return (str.match(/[a-zA-Zа-яА-ЯёЁ]/g) || []).length >= 3;
         }
 
+        // OCR регулярно отдаёт кириллицу латиницей-двойником: "СУММА БЕЗ НДС" читается
+        // как "CYMMA BE3 HAC". Для распознавания служебных строк приводим такие буквы
+        // обратно к кириллице — только для проверки по шаблонам, в названии позиции
+        // остаётся исходный текст.
+        const LOOKALIKE_LETTERS = { A: 'А', B: 'В', C: 'С', E: 'Е', H: 'Н', K: 'К', M: 'М', O: 'О', P: 'Р', T: 'Т', X: 'Х', Y: 'У', '3': 'З' };
+
+        function normalizeForMatch(str) {
+            return str.toUpperCase().replace(/[ABCEHKMOPTXY3]/g, ch => LOOKALIKE_LETTERS[ch]);
+        }
+
         // Итоговая строка чека — не позиция, а сумма для сверки с суммой позиций.
         // \b не подходит: граница слова в JS-регэкспах определяется по [A-Za-z0-9_],
         // кириллица в него не входит, поэтому \b после кириллической буквы не сработает.
-        const RECEIPT_TOTAL_RE = /^итого?(?=\s|$)/i;
+        const RECEIPT_TOTAL_RE = /^(итого?|всего|к\s*оплате)(?=\s|$)/i;
 
         // Служебные строки внизу чека (способ оплаты, НДС, сдача и т.п.) — технически
         // выглядят как "текст + сумма в конце строки", как и обычная позиция, поэтому
         // без этого списка попадали в список позиций наравне с реальными покупками.
-        const RECEIPT_NON_ITEM_RE = /^(сумма\s*ндс|ндс(\s*\d+%?)?|наличными|безналичными|электронными|получено(\s*(наличными|безналичными))?|сдача|предоплата|постоплата|скидка|бонус\w*|оплачено|внесено)(?=\s|$)/i;
+        // "СУММА БЕЗ ..." — одним шаблоном на "БЕЗ НДС", "БЕЗ НАЛОГА" и на варианты,
+        // где само "НДС" распозналось с ошибками.
+        const RECEIPT_NON_ITEM_RE = new RegExp('^(' + [
+            // "БЕЗ" после латинизации даёт "ВЕЗ" (латинская B — двойник и Б, и В),
+            // поэтому допускаем обе первые буквы.
+            'сумма\\s*[бв]ез\\s*\\S+',
+            'сумма\\s*(с\\s*)?ндс',
+            'ндс(\\s*\\d+\\s*%?)?',
+            'в\\s*т\\.?\\s*ч\\.?\\s*ндс',
+            '[бв]ез\\s*ндс',
+            'наличными',
+            'безналичными',
+            'электронными',
+            'получено(\\s*(наличными|безналичными))?',
+            'сдача',
+            'предоплата',
+            'постоплата',
+            'встречным\\s*предоставлением',
+            'округление',
+            'скидка',
+            'бонус\\w*',
+            'оплачено',
+            'внесено',
+        ].join('|') + ')(?=\\s|$)', 'i');
 
+        function isReceiptTotalLine(desc) {
+            return RECEIPT_TOTAL_RE.test(normalizeForMatch(desc));
+        }
+
+        function isReceiptNonItemLine(desc) {
+            return RECEIPT_NON_ITEM_RE.test(normalizeForMatch(desc));
+        }
+
+        // Одна позиция чека часто занимает две строки: название и следом "цена × кол-во
+        // = сумма". Если название читается из обеих строк, позиция задваивается — такой
+        // повтор отбрасываем. Повтор помечается флагом fresh=false ещё при разборе:
+        // одинаковые подряд позиции с fresh=true — это две реальные одинаковые покупки
+        // (два «Закусочных» по 120 ₽ в одном чеке), и обе должны остаться.
         function dedupeCandidates(results) {
-            return results.filter((c, i) => {
-                const prev = results[i - 1];
-                return !prev || prev.text !== c.text || prev.amount !== c.amount;
-            });
+            return results
+                .filter((c, i) => {
+                    const prev = results[i - 1];
+                    return c.fresh || !prev || prev.text !== c.text || prev.amount !== c.amount;
+                })
+                .map(({ text, amount }) => ({ text, amount }));
         }
 
         // Табличный режим OCR.space (isTable=true) отдаёт строки чека, где ячейки
@@ -1661,6 +1742,9 @@
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
             const results = [];
             let contextDesc = '';
+            // Название из предыдущей строки уже использовано в позиции — значит,
+            // следующая сумма с тем же названием относится к той же покупке.
+            let contextUsed = false;
             let total = null;
 
             for (const line of lines) {
@@ -1668,29 +1752,39 @@
                 if (cells.length === 0) continue;
 
                 const lastCell = cells[cells.length - 1];
-                const amount = parseAmountFromString(lastCell);
+                const parsed = parseAmountFromString(lastCell);
 
-                if (amount === null) {
+                if (parsed === null) {
                     const letters = cells.filter(isMeaningfulText).join(' ');
-                    if (letters) contextDesc = letters;
+                    if (letters) {
+                        contextDesc = letters;
+                        contextUsed = false;
+                    }
                     continue;
                 }
 
+                const amount = reconcileAmount(line.replace(/\t/g, ' '), parsed);
                 const descCells = cells.slice(0, -1).filter(isMeaningfulText).join(' ');
                 const desc = descCells || contextDesc || lastCell;
 
-                if (RECEIPT_TOTAL_RE.test(desc)) {
+                if (isReceiptTotalLine(desc)) {
                     total = amount;
                     contextDesc = '';
                     continue;
                 }
-                if (RECEIPT_NON_ITEM_RE.test(desc)) {
+                if (isReceiptNonItemLine(desc)) {
                     contextDesc = '';
                     continue;
                 }
 
-                if (descCells) contextDesc = descCells;
-                results.push({ text: contextDesc || lastCell, amount });
+                let fresh = true;
+                if (descCells) {
+                    contextDesc = descCells;
+                } else if (contextDesc) {
+                    fresh = !contextUsed;
+                }
+                contextUsed = true;
+                results.push({ text: contextDesc || lastCell, amount, fresh });
             }
             return { items: dedupeCandidates(results), total };
         }
@@ -1710,7 +1804,7 @@
 
             const flush = () => {
                 if (currentDesc && lastAmount != null) {
-                    results.push({ text: currentDesc, amount: lastAmount });
+                    results.push({ text: currentDesc, amount: lastAmount, fresh: true });
                 }
                 currentDesc = null;
                 lastAmount = null;
@@ -1719,9 +1813,14 @@
             for (const line of lines) {
                 const m = line.match(TRAILING_AMOUNT_RE);
                 if (m) {
-                    const amount = parseAmountMatch(m);
-                    if (amount === null) continue;
-                    const prefix = line.slice(0, m.index).trim();
+                    const parsed = parseAmountMatch(m);
+                    if (parsed === null) continue;
+                    const amount = reconcileAmount(line, parsed);
+                    // Название позиции — всё до расчёта "цена × кол-во": если и название,
+                    // и расчёт оказались на одной строке, в описание должно попасть
+                    // только название, а не "морс 160.00 * 1шт. =".
+                    const pq = line.match(PRICE_QTY_RE);
+                    const prefix = line.slice(0, pq ? pq.index : m.index).trim();
 
                     if (awaitingTotalAmount && !prefix) {
                         total = amount;
@@ -1730,19 +1829,19 @@
                     }
                     awaitingTotalAmount = false;
 
-                    if (prefix && RECEIPT_TOTAL_RE.test(prefix)) {
+                    if (prefix && isReceiptTotalLine(prefix)) {
                         flush();
                         total = amount;
                         continue;
                     }
-                    if (prefix && RECEIPT_NON_ITEM_RE.test(prefix)) {
+                    if (prefix && isReceiptNonItemLine(prefix)) {
                         flush();
                         continue;
                     }
 
                     if (prefix && isMeaningfulText(prefix)) {
                         flush();
-                        results.push({ text: prefix, amount });
+                        results.push({ text: prefix, amount, fresh: true });
                     } else {
                         lastAmount = amount;
                     }
@@ -1751,12 +1850,12 @@
 
                 if (!isMeaningfulText(line)) continue; // мусор/маркеры кол-ва — не сбрасываем контекст
 
-                if (RECEIPT_TOTAL_RE.test(line)) {
+                if (isReceiptTotalLine(line)) {
                     flush();
                     awaitingTotalAmount = true;
                     continue;
                 }
-                if (RECEIPT_NON_ITEM_RE.test(line)) {
+                if (isReceiptNonItemLine(line)) {
                     flush();
                     awaitingTotalAmount = false;
                     continue;
@@ -1801,12 +1900,11 @@
             const noResults = document.getElementById('receipt-no-results');
             const saveBtn = document.getElementById('receipt-save-btn');
 
-            renderReceiptTotalHint();
-
             if (receiptCandidates.length === 0) {
                 container.innerHTML = '';
                 noResults.classList.remove('hidden');
                 saveBtn.classList.add('hidden');
+                renderReceiptTotalHint();
                 return;
             }
             noResults.classList.add('hidden');
@@ -1831,6 +1929,10 @@
                 </div>
             `).join('');
 
+            // Сверка с итогом чека считается по значениям в полях ввода, поэтому её
+            // можно рисовать только после того, как поля появились в DOM: иначе сумма
+            // позиций всегда выходит нулевой и подсказка ругается на пустом месте.
+            renderReceiptTotalHint();
             updateReceiptSaveButton();
         }
 
