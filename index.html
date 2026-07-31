@@ -1522,10 +1522,14 @@
             return receiptSessionPhotos.reduce((s, p) => s + (p.detectedDiscount || 0), 0);
         }
 
+        // Экранируем и кавычки: почти везде подстановка идёт внутрь HTML-атрибута
+        // (value="...", src="..."), а сериализация через textContent/innerHTML кавычки
+        // не трогает — имя участника вида «" onfocus="…» закрывало атрибут и добавляло
+        // в разметку свой обработчик.
+        const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
         function escapeHtml(str) {
-            const div = document.createElement('div');
-            div.textContent = str;
-            return div.innerHTML;
+            return String(str ?? '').replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
         }
 
         function getTesseractWorker() {
@@ -3088,12 +3092,18 @@
             grid.innerHTML = names().map(p => {
                 const s = summary[p];
                 const balanceClass = s.balance > 0.01 ? 'balance-positive' : s.balance < -0.01 ? 'balance-negative' : 'balance-zero';
-                const settledRow = (s.settledOut || s.settledIn)
-                    ? `<div class="summary-item-row">
-                           <span>Взаиморасчёты:</span>
-                           <span class="amount">${s.settledOut ? '−' : ''}${formatCurrency(s.settledOut || s.settledIn)}</span>
-                       </div>`
-                    : '';
+                // Один и тот же человек может и переводить, и получать переводы —
+                // показываем обе строки, иначе половина взаиморасчётов исчезает
+                // из карточки, хотя в балансе она учтена.
+                const settledRow = [
+                    s.settledOut ? ['Перевёл(а):', `−${formatCurrency(s.settledOut)}`] : null,
+                    s.settledIn ? ['Получил(а):', formatCurrency(s.settledIn)] : null,
+                ].filter(Boolean).map(([label, value]) => `
+                    <div class="summary-item-row">
+                        <span>${label}</span>
+                        <span class="amount">${value}</span>
+                    </div>
+                `).join('');
                 return `
                     <div class="summary-item">
                         <div class="summary-item-name">${escapeHtml(p)}</div>
@@ -3249,7 +3259,7 @@
         window.viewReceiptPhotos = function(urlsJsonEnc) {
             const urls = JSON.parse(decodeURIComponent(urlsJsonEnc));
             document.getElementById('receipt-photos-viewer').innerHTML = urls.map(u => `
-                <img src="${u}" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);">
+                <img src="${escapeHtml(u)}" style="width: 100%; border-radius: 8px; border: 1px solid var(--border);">
             `).join('');
             openModal('receipt-photos-modal', { onDismiss: window.closeReceiptPhotosViewer });
         };
@@ -3297,7 +3307,7 @@
                 const photoCount = g.photos.length > 1 ? `, фото: ${g.photos.length}` : '';
                 return `
                     <div class="receipt-gallery-card" onclick="viewReceiptPhotos('${urlsEnc}')">
-                        <img src="${g.photos[0]}" alt="Чек от ${formatDate(g.date)}">
+                        <img src="${escapeHtml(g.photos[0])}" alt="Чек от ${formatDate(g.date)}">
                         <div class="receipt-gallery-info">
                             <div>${formatDate(g.date)}</div>
                             <div class="amount">${formatCurrency(total)}</div>
@@ -3761,6 +3771,11 @@
             activeTripId = id;
             localStorage.setItem(ACTIVE_TRIP_KEY, activeTripId);
             loadCache();
+            // Незакрытая правка относится к записи прошлой поездки: сохранение после
+            // переключения меняло бы расход, которого в новой поездке даже не видно.
+            cancelEdit();
+            cancelPersonalEdit();
+            selectedPerson = names()[0] || null;
             renderAll();
             updateStatus();
             if (navigator.onLine) {
@@ -3834,6 +3849,8 @@
                 try {
                     await dbDelete('trips', id);
                     trips = trips.filter(t => t.id !== id);
+                    // Кэш удалённой поездки иначе остаётся в localStorage навсегда.
+                    localStorage.removeItem(`${CACHE_KEY}:${id}`);
                     saveTripsCache();
                     renderTripSwitcher();
                     renderTripsSettings();
@@ -4028,6 +4045,17 @@
                     if (pe.category === oldName) {
                         await dbUpdate('personal_expenses', pe.id, { category: newName });
                         pe.category = newName;
+                    }
+                }
+
+                // Шаблон быстрой траты хранит название категории — без этого он молча
+                // перестаёт её подставлять, потому что такой категории больше нет.
+                for (const t of expenseTemplates) {
+                    if (t.category === oldName) {
+                        if (!templatesAreLocalDefaults()) {
+                            await dbUpdate('expense_templates', t.id, { category: newName });
+                        }
+                        t.category = newName;
                     }
                 }
 
@@ -4322,7 +4350,10 @@
         window.exportBackup = function() {
             const backup = {
                 exported_at: new Date().toISOString(),
+                trip: trips.find(t => t.id === activeTripId) || null,
                 participants,
+                categories,
+                expense_templates: expenseTemplates,
                 expenses,
                 personal_expenses: personalExpenses,
                 settlements
