@@ -981,7 +981,7 @@
                         </div>
                         <div class="form-group">
                             <label for="amount">Сумма (₽)</label>
-                            <input type="number" id="amount" step="0.01" min="0" placeholder="0.00" required>
+                            <input type="number" id="amount" step="0.01" min="0.01" placeholder="0.00" required>
                         </div>
                     </div>
 
@@ -1142,7 +1142,7 @@
                         </div>
                         <div class="form-group">
                             <label for="personal-amount">Сумма (₽)</label>
-                            <input type="number" id="personal-amount" step="0.01" min="0" placeholder="0.00" required>
+                            <input type="number" id="personal-amount" step="0.01" min="0.01" placeholder="0.00" required>
                         </div>
                     </div>
 
@@ -4271,25 +4271,24 @@
             });
         }
 
+        // Матрица показывает те же переводы, что и список долгов на вкладке «Итоги»
+        // (computeDebts — минимальное число переводов). Раньше она распределяла долг
+        // каждого должника между всеми кредиторами пропорционально их балансам:
+        // суммы по каждому участнику сходились, но пары и цифры не совпадали со
+        // списком, и сверка двух вкладок выглядела как ошибка в расчётах.
         function renderDebtMatrix() {
-            const summary = computeCommonBalances();
             const list = names();
-            const totalCredit = list.reduce((sum, p) => sum + Math.max(summary[p].balance, 0), 0);
+            const debts = computeDebts(computeCommonBalances());
+            const byPair = new Map(debts.map(d => [`${d.from} ${d.to}`, d.amount]));
 
             let html = '<thead><tr><th></th>' + list.map(p => `<th>${escapeHtml(p)}</th>`).join('') + '</tr></thead><tbody>';
             list.forEach(debtor => {
                 html += `<tr><th>${escapeHtml(debtor)}</th>`;
                 list.forEach(creditor => {
-                    const isDebtor = summary[debtor].balance < -0.01;
-                    const isCreditor = summary[creditor].balance > 0.01;
-                    if (debtor === creditor || !isDebtor || !isCreditor || totalCredit === 0) {
-                        html += '<td class="diagonal">—</td>';
-                    } else {
-                        const amount = Math.abs(summary[debtor].balance) * summary[creditor].balance / totalCredit;
-                        html += amount > 0.01
-                            ? `<td class="amount-cell">${formatCurrency(amount)}</td>`
-                            : '<td class="diagonal">—</td>';
-                    }
+                    const amount = byPair.get(`${debtor} ${creditor}`);
+                    html += amount != null
+                        ? `<td class="amount-cell">${formatCurrency(amount)}</td>`
+                        : '<td class="diagonal">—</td>';
                 });
                 html += '</tr>';
             });
