@@ -167,6 +167,7 @@ CREATE INDEX idx_settlements_trip_id ON settlements(trip_id);
 -- ============================================
 
 alter table expenses add column if not exists receipt_photos text[];
+alter table personal_expenses add column if not exists receipt_photos text[];
 
 insert into storage.buckets (id, name, public)
 values ('receipts', 'receipts', true)

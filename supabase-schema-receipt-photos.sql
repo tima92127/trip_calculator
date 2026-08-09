@@ -4,6 +4,7 @@
 -- дата создания schema после добавления этого файла).
 
 alter table expenses add column if not exists receipt_photos text[];
+alter table personal_expenses add column if not exists receipt_photos text[];
 
 insert into storage.buckets (id, name, public)
 values ('receipts', 'receipts', true)
